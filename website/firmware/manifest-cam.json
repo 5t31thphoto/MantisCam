@@ -1,0 +1,16 @@
+{
+  "name": "MANTIS ESP32-CAM Fleet",
+  "version": "1.0.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "esp32cam-fleet.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

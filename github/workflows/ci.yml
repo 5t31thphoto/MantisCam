@@ -1,0 +1,128 @@
+name: Mantis Build & Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Unzip into repo, consume zip, commit & push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          mapfile -t ZIPS < <(find . -maxdepth 1 -type f -name '*.zip' | sort)
+          if [ ${#ZIPS[@]} -eq 0 ]; then
+            echo "No zip in root — build existing tree"
+            test -f platformio.ini || { echo "no platformio.ini"; exit 1; }
+            exit 0
+          fi
+
+          for z in "${ZIPS[@]}"; do
+            echo "EXTRACT $z"
+            TMP=$(mktemp -d)
+            unzip -o "$z" -d "$TMP"
+            NDIR=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | wc -l)
+            NFILE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type f | wc -l)
+            TOP=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1 || true)
+            if [ "$NDIR" -eq 1 ] && [ "$NFILE" -eq 0 ] && [ -n "$TOP" ]; then
+              cp -a "$TOP"/. .
+            else
+              cp -a "$TMP"/. .
+            fi
+            rm -rf "$TMP"
+            rm -f "$z"
+            echo "CONSUMED $z"
+          done
+
+          test -f platformio.ini
+          test -f src/main.cpp
+
+          git add -A
+          if git diff --staged --quiet; then
+            echo "Nothing new to commit"
+          else
+            git commit -m "ci: extract payload into repo (consume zip) [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+            echo "PUSHED extracted tree to ${{ github.ref_name }}"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install -U platformio esptool
+
+      - name: Build
+        run: |
+          rm -rf .pio
+          pio run -e m5stack-core2
+          ls -la .pio/build/m5stack-core2/
+          ls -la firmware_merged.bin 2>/dev/null || true
+
+      - name: Stage website firmware
+        env:
+          RUN: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          mkdir -p website/firmware
+          if [ -f firmware_merged.bin ]; then
+            SRC=firmware_merged.bin
+          else
+            SRC=.pio/build/m5stack-core2/firmware.bin
+          fi
+          test -f "$SRC"
+          cp -f "$SRC" website/firmware/mantis-core2-merged.bin
+          cp -f "$SRC" "website/firmware/mantis-core2-merged-r${RUN}.bin"
+          cp -f .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-app.bin 2>/dev/null || true
+          SIZE=$(wc -c < website/firmware/mantis-core2-merged.bin)
+          MD5=$(md5sum website/firmware/mantis-core2-merged.bin | awk '{print $1}')
+          MAIN=$(md5sum src/main.cpp | awk '{print $1}')
+          printf 'run=%s\nsize=%s\nbin_md5=%s\nmain_cpp_md5=%s\nbuilt_utc=%s\n' \
+            "$RUN" "$SIZE" "$MD5" "$MAIN" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            > website/firmware/BUILD.txt
+          if [ -f website/index.html ]; then
+            sed -i "s|firmware/mantis-core2-merged\\.bin|firmware/mantis-core2-merged-r${RUN}.bin|g" website/index.html
+          fi
+          if [ -f website/firmware/manifest-core2.json ]; then
+            sed -i "s|mantis-core2-merged\\.bin|mantis-core2-merged-r${RUN}.bin|g" website/firmware/manifest-core2.json
+          fi
+          cat website/firmware/BUILD.txt
+          ls -la website/firmware/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
