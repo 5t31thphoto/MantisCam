@@ -21,74 +21,113 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ----------------------------------------------------------
-      # 1. Zip extractor — look for any .zip in repo root,
-      #    extract with overwrite (add & replace), then continue.
-      # ----------------------------------------------------------
+      # ============================================================
+      # STEP 1 — Zip extractor (MUST run before any build)
+      # Looks for *.zip in the repo root, extracts with overwrite
+      # (add & replace), flattens a single top-level folder if present,
+      # then the rest of the pipeline runs on the extracted tree.
+      # ============================================================
       - name: Zip Extractor (add & replace)
         run: |
-          set -e
-          ZIPS=$(find . -maxdepth 1 -name '*.zip' -type f | head -5)
-          if [ -z "$ZIPS" ]; then
-            echo "No zip found in root — skipping extract."
+          set -euo pipefail
+          echo "=== Zip Extractor (first step) ==="
+          echo "Working directory: $(pwd)"
+          echo "Root listing:"
+          ls -la
+
+          ZIPS=$(find . -maxdepth 1 -name '*.zip' -type f | sort || true)
+          if [ -z "${ZIPS}" ]; then
+            echo "No .zip found in repo root."
+            if [ -f platformio.ini ]; then
+              echo "platformio.ini already present at root — continuing."
+            else
+              echo "ERROR: No zip and no platformio.ini at root."
+              echo "Put a project zip in the repo root, or commit the source tree flat."
+              exit 1
+            fi
           else
-            for z in $ZIPS; do
-              echo "Extracting $z (overwrite)…"
-              unzip -o "$z" -d .
-              echo "Contents after extract:"
+            for z in ${ZIPS}; do
+              echo "Found zip: $z"
+              echo "Extracting with overwrite (add & replace)…"
+              # Extract into a temp dir first so we can flatten cleanly
+              TMP=$(mktemp -d)
+              unzip -o "$z" -d "$TMP"
+              echo "Zip contents:"
+              find "$TMP" -maxdepth 3 -type f | head -50
+
+              # If the zip has exactly one top-level directory, use its contents
+              TOP=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1)
+              NDIR=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | wc -l)
+              NFILE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type f | wc -l)
+
+              if [ "$NDIR" -eq 1 ] && [ "$NFILE" -eq 0 ]; then
+                echo "Flattening single top-level folder: $(basename "$TOP")"
+                # Copy everything from that folder into the repo root (overwrite)
+                cp -a "$TOP"/. .
+              else
+                echo "Copying zip contents directly into repo root (overwrite)"
+                cp -a "$TMP"/. .
+              fi
+              rm -rf "$TMP"
+              echo "After extract, root listing:"
               ls -la
             done
-            # Optional: stage the extracted files so they become part of the tree
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git diff --staged --quiet || git commit -m "ci: apply zip contents (add & replace)"
           fi
+
+          # Final sanity check
+          if [ ! -f platformio.ini ]; then
+            echo "ERROR: platformio.ini still missing after zip extract."
+            echo "Tree:"
+            find . -maxdepth 3 -type f | head -80
+            exit 1
+          fi
+          echo "platformio.ini found — ready to build."
+          cat platformio.ini | head -20
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install PlatformIO
+      - name: Install PlatformIO + esptool
         run: |
           python -m pip install --upgrade pip
           pip install platformio esptool
 
       - name: Build Core2 firmware
         run: |
+          echo "Building from: $(pwd)"
+          ls -la
           pio run -e m5stack-core2
+          echo "Build artifacts:"
           ls -la .pio/build/m5stack-core2/ || true
           ls -la firmware_merged.bin || true
 
-      - name: Collect artifacts
+      - name: Collect artifacts for Pages
         run: |
           mkdir -p website/firmware
-          # Prefer the merged binary produced by the post-script
           if [ -f firmware_merged.bin ]; then
-            cp firmware_merged.bin website/firmware/mantis-core2-merged.bin
+            cp -f firmware_merged.bin website/firmware/mantis-core2-merged.bin
+          elif [ -f .pio/build/m5stack-core2/firmware.bin ]; then
+            cp -f .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-merged.bin
+            echo "WARNING: using app binary as merged fallback"
           else
-            # Fallback: just the app binary
-            cp .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-app.bin
-            echo "WARNING: merged binary not found, using app binary only"
+            echo "ERROR: no firmware binary produced"
+            exit 1
           fi
-          # Also keep the raw app for advanced users
-          cp .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-app.bin 2>/dev/null || true
+          cp -f .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-app.bin 2>/dev/null || true
           ls -la website/firmware/
 
-      # Optional: build a minimal “fleet” ESP32-CAM binary if a
-      # cam/ folder or platformio-cam.ini is present after zip extract
-      - name: Build ESP32-CAM fleet image (if present)
+      - name: Build ESP32-CAM fleet image (optional)
         run: |
-          if [ -f platformio-cam.ini ] || [ -d cam ]; then
-            echo "CAM project detected — building…"
-            # user can supply a cam/ sub-project via the zip
+          if [ -d cam ] || [ -f platformio-cam.ini ]; then
+            echo "CAM sub-project detected — building…"
             if [ -d cam ]; then
-              cd cam && pio run || true
-              cp .pio/build/*/firmware.bin ../website/firmware/esp32cam-fleet.bin 2>/dev/null || true
+              (cd cam && pio run) || true
+              cp cam/.pio/build/*/firmware.bin website/firmware/esp32cam-fleet.bin 2>/dev/null || true
             fi
           else
-            echo "No CAM sub-project — website will offer a placeholder + instructions."
+            echo "No CAM sub-project — skipping."
           fi
 
       - name: Upload Pages artifact
