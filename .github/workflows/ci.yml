@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -20,66 +20,51 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      # ----------------------------------------------------------
-      # 1) FIRST: find zip(s) in repo root, extract into the repo
-      #    (overwrite / add & replace), flatten single top folder,
-      #    then DELETE the zip (consume it). Build uses the tree.
-      # ----------------------------------------------------------
-      - name: Unzip payload into repo (consume zip)
-        id: unzip
+      - name: Unzip into repo, consume zip, commit & push
         run: |
           set -euo pipefail
-          echo "=== ROOT BEFORE ==="
-          ls -la
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           mapfile -t ZIPS < <(find . -maxdepth 1 -type f -name '*.zip' | sort)
           if [ ${#ZIPS[@]} -eq 0 ]; then
-            echo "No .zip in repo root."
-            if [ ! -f platformio.ini ]; then
-              echo "::error::No zip and no platformio.ini — nothing to build"
-              exit 1
-            fi
-            echo "Using checked-out tree as-is."
-          else
-            for z in "${ZIPS[@]}"; do
-              echo "=== EXTRACTING: $z ==="
-              TMP=$(mktemp -d)
-              unzip -o "$z" -d "$TMP"
-              echo "--- inside zip ---"
-              find "$TMP" -type f | head -60
-
-              NDIR=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | wc -l)
-              NFILE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type f | wc -l)
-              TOP=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1 || true)
-
-              if [ "$NDIR" -eq 1 ] && [ "$NFILE" -eq 0 ] && [ -n "$TOP" ]; then
-                echo "Flatten single root folder: $TOP"
-                # overwrite repo with folder contents
-                cp -a "$TOP"/. .
-              else
-                echo "Copy zip root contents onto repo (overwrite)"
-                cp -a "$TMP"/. .
-              fi
-              rm -rf "$TMP"
-
-              # CONSUME the zip so the working tree is the source of truth
-              echo "Consuming (deleting) $z"
-              rm -f "$z"
-            done
+            echo "No zip in root — build existing tree"
+            test -f platformio.ini || { echo "no platformio.ini"; exit 1; }
+            exit 0
           fi
 
-          echo "=== ROOT AFTER EXTRACT ==="
-          ls -la
-          echo "=== VERIFY SOURCE ==="
-          test -f platformio.ini || { echo "::error::platformio.ini missing after extract"; exit 1; }
-          test -f src/main.cpp || { echo "::error::src/main.cpp missing after extract"; exit 1; }
+          for z in "${ZIPS[@]}"; do
+            echo "EXTRACT $z"
+            TMP=$(mktemp -d)
+            unzip -o "$z" -d "$TMP"
+            NDIR=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | wc -l)
+            NFILE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type f | wc -l)
+            TOP=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1 || true)
+            if [ "$NDIR" -eq 1 ] && [ "$NFILE" -eq 0 ] && [ -n "$TOP" ]; then
+              cp -a "$TOP"/. .
+            else
+              cp -a "$TMP"/. .
+            fi
+            rm -rf "$TMP"
+            rm -f "$z"
+            echo "CONSUMED $z"
+          done
 
-          echo "platformio.ini:"
-          head -15 platformio.ini
-          echo "main.cpp size=$(wc -c < src/main.cpp) md5=$(md5sum src/main.cpp | awk '{print $1}')"
-          # Prove v2/v3 features are present in the tree we will build
-          grep -n "startVideoRec\|saveLastSnapshot\|g_hasSnapPreview\|SCR_CAMS" src/main.cpp | head -20 || true
+          test -f platformio.ini
+          test -f src/main.cpp
+
+          git add -A
+          if git diff --staged --quiet; then
+            echo "Nothing new to commit"
+          else
+            git commit -m "ci: extract payload into repo (consume zip) [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+            echo "PUSHED extracted tree to ${{ github.ref_name }}"
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -87,69 +72,44 @@ jobs:
           python-version: '3.11'
 
       - name: Install PlatformIO
-        run: |
-          python -m pip install -U pip
-          pip install platformio esptool
+        run: pip install -U platformio esptool
 
-      # Clean build — never reuse a stale .pio from a previous cache/checkout
-      - name: Build firmware (clean)
+      - name: Build
         run: |
           rm -rf .pio
-          pio run -e m5stack-core2 -v
-          echo "=== build dir ==="
+          pio run -e m5stack-core2
           ls -la .pio/build/m5stack-core2/
           ls -la firmware_merged.bin 2>/dev/null || true
 
-      - name: Stage website + stamped firmware
+      - name: Stage website firmware
         env:
           RUN: ${{ github.run_number }}
-          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           mkdir -p website/firmware
-
-          # Prefer merge script output; else app bin
           if [ -f firmware_merged.bin ]; then
             SRC=firmware_merged.bin
-          elif [ -f .pio/build/m5stack-core2/firmware.bin ]; then
-            SRC=.pio/build/m5stack-core2/firmware.bin
           else
-            echo "::error::No firmware binary produced"
-            find .pio -name '*.bin' || true
-            exit 1
+            SRC=.pio/build/m5stack-core2/firmware.bin
           fi
-
-          # Stable name + unique stamped name (defeats browser/Pages caching)
-          cp -f "$SRC" "website/firmware/mantis-core2-merged.bin"
+          test -f "$SRC"
+          cp -f "$SRC" website/firmware/mantis-core2-merged.bin
           cp -f "$SRC" "website/firmware/mantis-core2-merged-r${RUN}.bin"
-          cp -f .pio/build/m5stack-core2/firmware.bin \
-                website/firmware/mantis-core2-app.bin 2>/dev/null || true
-
-          SIZE=$(wc -c < "website/firmware/mantis-core2-merged.bin")
-          MD5=$(md5sum "website/firmware/mantis-core2-merged.bin" | awk '{print $1}')
-          MAIN_MD5=$(md5sum src/main.cpp | awk '{print $1}')
-
-          cat > website/firmware/BUILD.txt << BLD
-          run=${RUN}
-          sha=${SHA}
-          size=${SIZE}
-          bin_md5=${MD5}
-          main_cpp_md5=${MAIN_MD5}
-          built_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          BLD
-
-          # Force download links to the stamped file so caches cannot serve v1
+          cp -f .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-app.bin 2>/dev/null || true
+          SIZE=$(wc -c < website/firmware/mantis-core2-merged.bin)
+          MD5=$(md5sum website/firmware/mantis-core2-merged.bin | awk '{print $1}')
+          MAIN=$(md5sum src/main.cpp | awk '{print $1}')
+          printf 'run=%s\nsize=%s\nbin_md5=%s\nmain_cpp_md5=%s\nbuilt_utc=%s\n' \
+            "$RUN" "$SIZE" "$MD5" "$MAIN" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            > website/firmware/BUILD.txt
           if [ -f website/index.html ]; then
             sed -i "s|firmware/mantis-core2-merged\\.bin|firmware/mantis-core2-merged-r${RUN}.bin|g" website/index.html
-            # also fix manifest path if present
-            if [ -f website/firmware/manifest-core2.json ]; then
-              sed -i "s|mantis-core2-merged\\.bin|mantis-core2-merged-r${RUN}.bin|g" website/firmware/manifest-core2.json
-            fi
           fi
-
-          echo "=== website/firmware ==="
-          ls -la website/firmware/
+          if [ -f website/firmware/manifest-core2.json ]; then
+            sed -i "s|mantis-core2-merged\\.bin|mantis-core2-merged-r${RUN}.bin|g" website/firmware/manifest-core2.json
+          fi
           cat website/firmware/BUILD.txt
+          ls -la website/firmware/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
