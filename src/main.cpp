@@ -943,7 +943,7 @@ bool httpControl(const char *var, int val) {
 }
 
 // Scale factor so decoded image fits CONTENT_W x CONTENT_H
-static int fitScale(int imgW, int imgH) {
+int fitScale(int imgW, int imgH) {
   // JPEGDEC scale: 0=1:1, 1=1:2, 2=1:4, 3=1:8
   for (int s = 0; s <= 3; s++) {
     int w = imgW >> s;
@@ -953,7 +953,7 @@ static int fitScale(int imgW, int imgH) {
   return 3;
 }
 
-static void decodeJpegFit(uint8_t *buf, size_t len) {
+void decodeJpegFit(uint8_t *buf, size_t len) {
   if (!buf || len < 100) return;
   if (!jpeg.openRAM(buf, len, jpegDrawCallback)) return;
   jpeg.setPixelType(RGB565_BIG_ENDIAN);
