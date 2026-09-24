@@ -11,6 +11,12 @@
 #include <JPEGDEC.h>
 #include <SD.h>
 #include <SPI.h>
+#include "mantis_bitmap.h"
+
+static constexpr int CONTENT_TOP = 28;
+static constexpr int CONTENT_BOTTOM = 210;  // footer starts here
+static constexpr int CONTENT_H = CONTENT_BOTTOM - CONTENT_TOP; // 182
+static constexpr int CONTENT_W = 320;
 
 static const uint16_t COL_BG=0x0A20, COL_PANEL=0x1A40, COL_ACCENT=0x5FE0,
                       COL_TEXT=0xE7FF, COL_DIM=0x7BEF, COL_ALERT=0xF800,
@@ -90,6 +96,9 @@ bool initSD(); void ensureDirs();
 void drawHeader(const char *t); void drawFooter(const char *a, const char *b, const char *c);
 void drawHome(); void drawCams(); void drawStream(); void drawSnapshot();
 void drawCamCtrl(); void drawWifi(); void drawAudioRec(); void drawAudioPlay(); void drawStatus(); void drawOsk();
+void drawMicScope();
+void drawSplash();
+void decodeJpegFit(uint8_t *buf, size_t len);
 void handleButtons(); void handleTouch();
 bool httpGetJson(const String &path, JsonDocument &doc);
 bool httpControl(const char *var, int val);
@@ -167,6 +176,12 @@ void loop() {
   }
 
   if (g_screen==SCR_STREAM && g_wifiOk) streamFrameTick();
+  // live scope refresh on audio screen
+  static uint32_t lastScope;
+  if (g_screen == SCR_AUDIO_REC && !g_oskActive && millis() - lastScope > 80) {
+    lastScope = millis();
+    drawMicScope();
+  }
 
   if (g_audioRecActive && g_audioBuf) {
     static int16_t chunk[AUDIO_CHUNK];
@@ -277,26 +292,39 @@ void connectToProfile(int idx) {
   connectWifi(g_profiles[idx].ssid, g_profiles[idx].pass);
 }
 
-void connectWifi(const char *ssid, const char *pass) {
+
+void drawSplash() {
   M5.Display.fillScreen(COL_BG);
+  // pixel mantis centered
+  int x0 = (320 - MANTIS_W) / 2;
+  int y0 = 36;
+  for (int y = 0; y < MANTIS_H; y++) {
+    for (int x = 0; x < MANTIS_W; x++) {
+      uint16_t c = MANTIS_PIX[y * MANTIS_W + x];
+      if (c) M5.Display.drawPixel(x0 + x, y0 + y, c);
+    }
+  }
   M5.Display.setTextColor(COL_ACCENT);
   M5.Display.setTextSize(2);
-  M5.Display.setCursor(16, 80);
-  M5.Display.print("Joining");
+  int tw = 9 * 12; // approx
+  M5.Display.setCursor((320 - 9 * 12) / 2, y0 + MANTIS_H + 12);
+  M5.Display.print("MantisCam");
   M5.Display.setTextSize(1);
-  M5.Display.setCursor(16, 115);
-  M5.Display.print(ssid);
+  M5.Display.setTextColor(COL_DIM);
+  M5.Display.setCursor(100, y0 + MANTIS_H + 40);
+  M5.Display.print("connecting...");
+}
 
+void connectWifi(const char *ssid, const char *pass) {
+  drawSplash();
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, pass);
-  uint32_t t0=millis();
-  while (WiFi.status()!=WL_CONNECTED && millis()-t0<15000) {
-    delay(300);
-    M5.Display.print(".");
+  uint32_t t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) {
+    delay(200);
   }
-  g_wifiOk = (WiFi.status()==WL_CONNECTED);
-  // if connected, try refresh name from /status
-  if (g_wifiOk && g_activeProfile>=0) {
+  g_wifiOk = (WiFi.status() == WL_CONNECTED);
+  if (g_wifiOk && g_activeProfile >= 0) {
     JsonDocument doc;
     if (httpGetJson("/status", doc)) {
       const char *nm = doc["name"] | "";
@@ -306,8 +334,11 @@ void connectWifi(const char *ssid, const char *pass) {
       }
     }
   }
-  delay(200);
-  g_needRedraw=true;
+  if (!g_wifiOk) {
+    // timeout → Cameras screen
+    g_screen = SCR_CAMS;
+  }
+  g_needRedraw = true;
 }
 
 bool initSD() {
@@ -466,9 +497,10 @@ void drawCams() {
 
 void drawStream() {
   drawHeader("Stream");
+  M5.Display.fillRect(0, CONTENT_TOP, CONTENT_W, CONTENT_H, COL_BG);
   if (g_activeProfile>=0 && g_profiles[g_activeProfile].used) {
     M5.Display.setTextColor(COL_DIM);
-    M5.Display.setCursor(8, 28);
+    M5.Display.setCursor(8, CONTENT_TOP + 2);
     M5.Display.print(g_profiles[g_activeProfile].label);
   }
   if (!g_wifiOk) {
@@ -477,10 +509,14 @@ void drawStream() {
     M5.Display.print("Not connected — use Cameras");
   } else if (g_recActive) {
     uint32_t sec=(millis()-g_recStartMs)/1000;
-    M5.Display.fillRoundRect(10,32,130,18,3,COL_REC);
+    M5.Display.fillRoundRect(10, CONTENT_TOP + 4, 130, 18, 3, COL_REC);
     M5.Display.setTextColor(COL_TEXT);
-    M5.Display.setCursor(16,36);
+    M5.Display.setCursor(16, CONTENT_TOP + 8);
     M5.Display.printf("REC %02lu:%02lu f:%lu", sec/60, sec%60, (unsigned long)g_recFrames);
+  } else {
+    M5.Display.setTextColor(COL_DIM);
+    M5.Display.setCursor(80, 100);
+    M5.Display.print("Waiting for frames...");
   }
   drawFooter("< Prev", g_recActive?"STOP":"REC", "Next >");
 }
@@ -489,13 +525,8 @@ void drawSnapshot() {
   drawHeader("Snapshot");
   // If we already have a preview in the buffer, re-decode it onto the content area
   if (g_hasSnapPreview && g_jpgBuf && g_jpgLen > 100) {
-    if (jpeg.openRAM(g_jpgBuf, g_jpgLen, jpegDrawCallback)) {
-      jpeg.setPixelType(RGB565_BIG_ENDIAN);
-      int scale = jpeg.getWidth() > 320 ? 1 : 0;
-      jpeg.decode(0, 28, scale);
-      jpeg.close();
-    }
-    // Save button overlaid near bottom content area
+    decodeJpegFit(g_jpgBuf, g_jpgLen);
+// Save button overlaid near bottom content area
     M5.Display.fillRoundRect(20, 178, 130, 28, 5, COL_BTN);
     M5.Display.setTextColor(COL_ACCENT);
     M5.Display.setCursor(40, 186);
@@ -558,22 +589,92 @@ void drawWifi() {
   drawFooter("< Prev", "Edit SSID", "Next >");
 }
 
+void drawMicScope() {
+  // live waveform in content area
+  static int16_t scope[160];
+  static int scopeIdx = 0;
+  int16_t chunk[AUDIO_CHUNK];
+  bool clipped = false;
+  if (M5.Mic.isEnabled()) {
+    // peek one block if possible — while recording data already flows in loop
+  }
+  // draw from recent g_audioBuf tail or zero
+  int samples = 160;
+  int16_t peak = 0;
+  if (g_audioBuf && g_audioBufSamples > samples) {
+    size_t start = g_audioBufSamples - samples;
+    for (int i = 0; i < samples; i++) {
+      int16_t v = g_audioBuf[start + i];
+      scope[i] = v;
+      int16_t a = v < 0 ? -v : v;
+      if (a > peak) peak = a;
+      if (a > 28000) clipped = true;
+    }
+  } else if (g_audioRecActive && M5.Mic.isEnabled()) {
+    if (M5.Mic.record(chunk, AUDIO_CHUNK, AUDIO_SR)) {
+      for (int i = 0; i < 160 && i < AUDIO_CHUNK; i++) {
+        scope[i] = chunk[i];
+        int16_t a = chunk[i] < 0 ? -chunk[i] : chunk[i];
+        if (a > peak) peak = a;
+        if (a > 28000) clipped = true;
+      }
+    }
+  } else {
+    for (int i = 0; i < 160; i++) scope[i] = 0;
+  }
+
+  int boxY = CONTENT_TOP + 8;
+  int boxH = 90;
+  M5.Display.fillRect(10, boxY, 300, boxH, COL_PANEL);
+  int mid = boxY + boxH / 2;
+  M5.Display.drawFastHLine(10, mid, 300, COL_DIM);
+  for (int i = 1; i < 160; i++) {
+    int x0 = 10 + (i - 1) * 300 / 160;
+    int x1 = 10 + i * 300 / 160;
+    int y0 = mid - (int)scope[i - 1] * (boxH / 2 - 4) / 32768;
+    int y1 = mid - (int)scope[i] * (boxH / 2 - 4) / 32768;
+    M5.Display.drawLine(x0, y0, x1, y1, clipped ? COL_ALERT : COL_ACCENT);
+  }
+  // clipping indicator
+  if (clipped) {
+    M5.Display.fillRoundRect(240, boxY + 4, 64, 16, 3, COL_ALERT);
+    M5.Display.setTextColor(COL_TEXT);
+    M5.Display.setCursor(248, boxY + 7);
+    M5.Display.print("CLIP!");
+  } else {
+    M5.Display.setTextColor(COL_DIM);
+    M5.Display.setCursor(240, boxY + 7);
+    M5.Display.printf("pk:%d", (int)peak);
+  }
+}
+
 void drawAudioRec() {
   drawHeader("Audio Rec");
+  // enable mic for scope even when not recording
+  if (!g_audioRecActive) {
+    M5.Speaker.end();
+    if (!M5.Mic.isEnabled()) M5.Mic.begin();
+  }
+  drawMicScope();
   M5.Display.setTextColor(COL_TEXT);
-  M5.Display.setCursor(16,50);
+  M5.Display.setCursor(16, CONTENT_TOP + 105);
   M5.Display.print("Mic -> /audio/*.wav  (max 20s)");
   if (g_audioRecActive) {
-    uint32_t sec=(millis()-g_audioRecStart)/1000;
-    M5.Display.fillRoundRect(60,100,200,48,8,COL_REC);
-    M5.Display.setTextSize(2); M5.Display.setCursor(90,114);
-    M5.Display.printf("REC %02lu:%02lu",sec/60,sec%60); M5.Display.setTextSize(1);
+    uint32_t sec = (millis() - g_audioRecStart) / 1000;
+    M5.Display.fillRoundRect(60, CONTENT_TOP + 125, 200, 36, 8, COL_REC);
+    M5.Display.setTextSize(2);
+    M5.Display.setCursor(90, CONTENT_TOP + 133);
+    M5.Display.printf("REC %02lu:%02lu", sec / 60, sec % 60);
+    M5.Display.setTextSize(1);
   } else {
-    M5.Display.fillRoundRect(60,100,200,48,8,COL_BTN);
-    M5.Display.setTextColor(COL_ACCENT); M5.Display.setTextSize(2);
-    M5.Display.setCursor(95,114); M5.Display.print("B = REC"); M5.Display.setTextSize(1);
+    M5.Display.fillRoundRect(60, CONTENT_TOP + 125, 200, 36, 8, COL_BTN);
+    M5.Display.setTextColor(COL_ACCENT);
+    M5.Display.setTextSize(2);
+    M5.Display.setCursor(95, CONTENT_TOP + 133);
+    M5.Display.print("B = REC");
+    M5.Display.setTextSize(1);
   }
-  drawFooter("< Prev", g_audioRecActive?"Stop":"REC", "Next >");
+  drawFooter("< Prev", g_audioRecActive ? "Stop" : "REC", "Next >");
 }
 
 void drawAudioPlay() {
@@ -648,12 +749,7 @@ void handleButtons() {
     if (g_recActive) stopVideoRec();
     if (g_audioRecActive) stopAudioRec();
     if (g_audioPlaying) { M5.Speaker.stop(); g_audioPlaying=false; }
-    if (g_screen==SCR_CAMS) {
-      // move selection up among used profiles
-      int used[MAX_PROFILES], n=0;
-      for (int i=0;i<MAX_PROFILES;i++) if (g_profiles[i].used) used[n++]=i;
-      if (n>0) { g_camListSel = (g_camListSel+n-1)%n; g_needRedraw=true; return; }
-    }
+    // A always changes screen (never stolen by Cameras list)
     g_screen = (Screen)((g_screen+SCR_COUNT-1)%SCR_COUNT);
     g_needRedraw=true;
   }
@@ -664,11 +760,7 @@ void handleButtons() {
     if (g_recActive) stopVideoRec();
     if (g_audioRecActive) stopAudioRec();
     if (g_audioPlaying) { M5.Speaker.stop(); g_audioPlaying=false; }
-    if (g_screen==SCR_CAMS) {
-      int used[MAX_PROFILES], n=0;
-      for (int i=0;i<MAX_PROFILES;i++) if (g_profiles[i].used) used[n++]=i;
-      if (n>0) { g_camListSel = (g_camListSel+1)%n; g_needRedraw=true; return; }
-    }
+    // C always changes screen
     g_screen = (Screen)((g_screen+1)%SCR_COUNT);
     g_needRedraw=true;
   }
@@ -849,6 +941,35 @@ bool httpControl(const char *var, int val) {
   int code=http.GET(); http.end();
   return code==200;
 }
+
+// Scale factor so decoded image fits CONTENT_W x CONTENT_H
+static int fitScale(int imgW, int imgH) {
+  // JPEGDEC scale: 0=1:1, 1=1:2, 2=1:4, 3=1:8
+  for (int s = 0; s <= 3; s++) {
+    int w = imgW >> s;
+    int h = imgH >> s;
+    if (w <= CONTENT_W && h <= CONTENT_H) return s;
+  }
+  return 3;
+}
+
+static void decodeJpegFit(uint8_t *buf, size_t len) {
+  if (!buf || len < 100) return;
+  if (!jpeg.openRAM(buf, len, jpegDrawCallback)) return;
+  jpeg.setPixelType(RGB565_BIG_ENDIAN);
+  int s = fitScale(jpeg.getWidth(), jpeg.getHeight());
+  int w = jpeg.getWidth() >> s;
+  int h = jpeg.getHeight() >> s;
+  int x = (CONTENT_W - w) / 2;
+  int y = CONTENT_TOP + (CONTENT_H - h) / 2;
+  if (x < 0) x = 0;
+  if (y < CONTENT_TOP) y = CONTENT_TOP;
+  // clear content only
+  M5.Display.fillRect(0, CONTENT_TOP, CONTENT_W, CONTENT_H, COL_BG);
+  jpeg.decode(x, y, s);
+  jpeg.close();
+}
+
 int jpegDrawCallback(JPEGDRAW *p) {
   M5.Display.pushImage(p->x,p->y,p->iWidth,p->iHeight,(uint16_t*)p->pPixels);
   return 1;
@@ -866,20 +987,14 @@ bool fetchSnapshot() {
   uint32_t t0 = millis();
   while (millis() - t0 < 5000 && g_jpgLen < g_jpgCap) {
     size_t a = stream->available();
-    if (a) g_jpgLen += stream->readBytes(g_jpgBuf + g_jpgLen, min(a, g_jpgCap - g_jpgLen));
+    if (a) g_jpgLen += stream->readBytes(g_jpgBuf + g_jpgLen, (size_t)min((size_t)a, g_jpgCap - g_jpgLen));
     else delay(1);
   }
   http.end();
   if (g_jpgLen < 100) return false;
   g_hasSnapPreview = true;
   // paint preview now; drawSnapshot will also re-paint on full redraw
-  if (jpeg.openRAM(g_jpgBuf, g_jpgLen, jpegDrawCallback)) {
-    jpeg.setPixelType(RGB565_BIG_ENDIAN);
-    int scale = jpeg.getWidth() > 320 ? 1 : 0;
-    M5.Display.fillRect(0, 28, 320, 180, COL_BG);
-    jpeg.decode(0, 28, scale);
-    jpeg.close();
-  }
+  decodeJpegFit(g_jpgBuf, g_jpgLen);
   return true;
 }
 
@@ -921,11 +1036,17 @@ void streamFrameTick() {
   }
   http.end();
   if (g_jpgLen<200) return;
-  if (jpeg.openRAM(g_jpgBuf,g_jpgLen,jpegDrawCallback)) {
-    jpeg.setPixelType(RGB565_BIG_ENDIAN);
-    jpeg.decode(0,28, jpeg.getWidth()>320?1:0);
-    jpeg.close();
+  decodeJpegFit(g_jpgBuf, g_jpgLen);
+  // re-anchor chrome so video never eats footer/header
+  drawHeader("Stream");
+  if (g_recActive) {
+    uint32_t sec=(millis()-g_recStartMs)/1000;
+    M5.Display.fillRoundRect(10, CONTENT_TOP + 4, 130, 18, 3, COL_REC);
+    M5.Display.setTextColor(COL_TEXT);
+    M5.Display.setCursor(16, CONTENT_TOP + 8);
+    M5.Display.printf("REC %02lu:%02lu f:%lu", sec/60, sec%60, (unsigned long)g_recFrames);
   }
+  drawFooter("< Prev", g_recActive?"STOP":"REC", "Next >");
   if (g_recActive && g_recFile) { g_recFile.write(g_jpgBuf,g_jpgLen); g_recFrames++; }
 }
 
@@ -995,7 +1116,7 @@ void playSelectedAudio() {
   String path="/audio/"+g_audioList[g_audioSel];
   File f=SD.open(path); if (!f) return;
   f.seek(44);
-  size_t got=f.read((uint8_t*)g_audioBuf, min((size_t)(f.size()-44),(size_t)(AUDIO_SR*22*sizeof(int16_t))));
+  size_t got=f.read((uint8_t*)g_audioBuf, (size_t)min((size_t)(f.size()-44),(size_t)(AUDIO_SR*22*sizeof(int16_t))));
   f.close();
   M5.Mic.end(); M5.Speaker.begin(); M5.Speaker.setVolume(180);
   M5.Speaker.playRaw(g_audioBuf, got/sizeof(int16_t), AUDIO_SR, false);
