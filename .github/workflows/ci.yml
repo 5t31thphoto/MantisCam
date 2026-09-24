@@ -21,29 +21,65 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Zip extract (first)
+      # ----------------------------------------------------------
+      # 1) FIRST: find zip(s) in repo root, extract into the repo
+      #    (overwrite / add & replace), flatten single top folder,
+      #    then DELETE the zip (consume it). Build uses the tree.
+      # ----------------------------------------------------------
+      - name: Unzip payload into repo (consume zip)
+        id: unzip
         run: |
           set -euo pipefail
-          ZIPS=$(find . -maxdepth 1 -name '*.zip' -type f | sort || true)
-          if [ -z "${ZIPS}" ]; then
-            echo "No zip in root — using checked-out tree."
+          echo "=== ROOT BEFORE ==="
+          ls -la
+
+          mapfile -t ZIPS < <(find . -maxdepth 1 -type f -name '*.zip' | sort)
+          if [ ${#ZIPS[@]} -eq 0 ]; then
+            echo "No .zip in repo root."
+            if [ ! -f platformio.ini ]; then
+              echo "::error::No zip and no platformio.ini — nothing to build"
+              exit 1
+            fi
+            echo "Using checked-out tree as-is."
           else
-            for z in ${ZIPS}; do
-              echo "Extracting $z (overwrite)…"
+            for z in "${ZIPS[@]}"; do
+              echo "=== EXTRACTING: $z ==="
               TMP=$(mktemp -d)
               unzip -o "$z" -d "$TMP"
+              echo "--- inside zip ---"
+              find "$TMP" -type f | head -60
+
               NDIR=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | wc -l)
               NFILE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type f | wc -l)
-              TOP=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1)
-              if [ "$NDIR" -eq 1 ] && [ "$NFILE" -eq 0 ]; then
+              TOP=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1 || true)
+
+              if [ "$NDIR" -eq 1 ] && [ "$NFILE" -eq 0 ] && [ -n "$TOP" ]; then
+                echo "Flatten single root folder: $TOP"
+                # overwrite repo with folder contents
                 cp -a "$TOP"/. .
               else
+                echo "Copy zip root contents onto repo (overwrite)"
                 cp -a "$TMP"/. .
               fi
               rm -rf "$TMP"
+
+              # CONSUME the zip so the working tree is the source of truth
+              echo "Consuming (deleting) $z"
+              rm -f "$z"
             done
           fi
-          test -f platformio.ini || { echo "platformio.ini missing"; find . -maxdepth 3 -type f; exit 1; }
+
+          echo "=== ROOT AFTER EXTRACT ==="
+          ls -la
+          echo "=== VERIFY SOURCE ==="
+          test -f platformio.ini || { echo "::error::platformio.ini missing after extract"; exit 1; }
+          test -f src/main.cpp || { echo "::error::src/main.cpp missing after extract"; exit 1; }
+
+          echo "platformio.ini:"
+          head -15 platformio.ini
+          echo "main.cpp size=$(wc -c < src/main.cpp) md5=$(md5sum src/main.cpp | awk '{print $1}')"
+          # Prove v2/v3 features are present in the tree we will build
+          grep -n "startVideoRec\|saveLastSnapshot\|g_hasSnapPreview\|SCR_CAMS" src/main.cpp | head -20 || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -51,20 +87,69 @@ jobs:
           python-version: '3.11'
 
       - name: Install PlatformIO
-        run: pip install platformio esptool
-
-      - name: Build
-        run: pio run -e m5stack-core2
-
-      - name: Collect firmware
         run: |
+          python -m pip install -U pip
+          pip install platformio esptool
+
+      # Clean build — never reuse a stale .pio from a previous cache/checkout
+      - name: Build firmware (clean)
+        run: |
+          rm -rf .pio
+          pio run -e m5stack-core2 -v
+          echo "=== build dir ==="
+          ls -la .pio/build/m5stack-core2/
+          ls -la firmware_merged.bin 2>/dev/null || true
+
+      - name: Stage website + stamped firmware
+        env:
+          RUN: ${{ github.run_number }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
           mkdir -p website/firmware
+
+          # Prefer merge script output; else app bin
           if [ -f firmware_merged.bin ]; then
-            cp firmware_merged.bin website/firmware/mantis-core2-merged.bin
+            SRC=firmware_merged.bin
+          elif [ -f .pio/build/m5stack-core2/firmware.bin ]; then
+            SRC=.pio/build/m5stack-core2/firmware.bin
           else
-            cp .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-merged.bin
+            echo "::error::No firmware binary produced"
+            find .pio -name '*.bin' || true
+            exit 1
           fi
-          cp .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-app.bin 2>/dev/null || true
+
+          # Stable name + unique stamped name (defeats browser/Pages caching)
+          cp -f "$SRC" "website/firmware/mantis-core2-merged.bin"
+          cp -f "$SRC" "website/firmware/mantis-core2-merged-r${RUN}.bin"
+          cp -f .pio/build/m5stack-core2/firmware.bin \
+                website/firmware/mantis-core2-app.bin 2>/dev/null || true
+
+          SIZE=$(wc -c < "website/firmware/mantis-core2-merged.bin")
+          MD5=$(md5sum "website/firmware/mantis-core2-merged.bin" | awk '{print $1}')
+          MAIN_MD5=$(md5sum src/main.cpp | awk '{print $1}')
+
+          cat > website/firmware/BUILD.txt << BLD
+          run=${RUN}
+          sha=${SHA}
+          size=${SIZE}
+          bin_md5=${MD5}
+          main_cpp_md5=${MAIN_MD5}
+          built_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          BLD
+
+          # Force download links to the stamped file so caches cannot serve v1
+          if [ -f website/index.html ]; then
+            sed -i "s|firmware/mantis-core2-merged\\.bin|firmware/mantis-core2-merged-r${RUN}.bin|g" website/index.html
+            # also fix manifest path if present
+            if [ -f website/firmware/manifest-core2.json ]; then
+              sed -i "s|mantis-core2-merged\\.bin|mantis-core2-merged-r${RUN}.bin|g" website/firmware/manifest-core2.json
+            fi
+          fi
+
+          echo "=== website/firmware ==="
+          ls -la website/firmware/
+          cat website/firmware/BUILD.txt
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
