@@ -21,114 +21,50 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ============================================================
-      # STEP 1 — Zip extractor (MUST run before any build)
-      # Looks for *.zip in the repo root, extracts with overwrite
-      # (add & replace), flattens a single top-level folder if present,
-      # then the rest of the pipeline runs on the extracted tree.
-      # ============================================================
-      - name: Zip Extractor (add & replace)
+      - name: Zip extract (first)
         run: |
           set -euo pipefail
-          echo "=== Zip Extractor (first step) ==="
-          echo "Working directory: $(pwd)"
-          echo "Root listing:"
-          ls -la
-
           ZIPS=$(find . -maxdepth 1 -name '*.zip' -type f | sort || true)
           if [ -z "${ZIPS}" ]; then
-            echo "No .zip found in repo root."
-            if [ -f platformio.ini ]; then
-              echo "platformio.ini already present at root — continuing."
-            else
-              echo "ERROR: No zip and no platformio.ini at root."
-              echo "Put a project zip in the repo root, or commit the source tree flat."
-              exit 1
-            fi
+            echo "No zip in root — using checked-out tree."
           else
             for z in ${ZIPS}; do
-              echo "Found zip: $z"
-              echo "Extracting with overwrite (add & replace)…"
-              # Extract into a temp dir first so we can flatten cleanly
+              echo "Extracting $z (overwrite)…"
               TMP=$(mktemp -d)
               unzip -o "$z" -d "$TMP"
-              echo "Zip contents:"
-              find "$TMP" -maxdepth 3 -type f | head -50
-
-              # If the zip has exactly one top-level directory, use its contents
-              TOP=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1)
               NDIR=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | wc -l)
               NFILE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type f | wc -l)
-
+              TOP=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1)
               if [ "$NDIR" -eq 1 ] && [ "$NFILE" -eq 0 ]; then
-                echo "Flattening single top-level folder: $(basename "$TOP")"
-                # Copy everything from that folder into the repo root (overwrite)
                 cp -a "$TOP"/. .
               else
-                echo "Copying zip contents directly into repo root (overwrite)"
                 cp -a "$TMP"/. .
               fi
               rm -rf "$TMP"
-              echo "After extract, root listing:"
-              ls -la
             done
           fi
-
-          # Final sanity check
-          if [ ! -f platformio.ini ]; then
-            echo "ERROR: platformio.ini still missing after zip extract."
-            echo "Tree:"
-            find . -maxdepth 3 -type f | head -80
-            exit 1
-          fi
-          echo "platformio.ini found — ready to build."
-          cat platformio.ini | head -20
+          test -f platformio.ini || { echo "platformio.ini missing"; find . -maxdepth 3 -type f; exit 1; }
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install PlatformIO + esptool
-        run: |
-          python -m pip install --upgrade pip
-          pip install platformio esptool
+      - name: Install PlatformIO
+        run: pip install platformio esptool
 
-      - name: Build Core2 firmware
-        run: |
-          echo "Building from: $(pwd)"
-          ls -la
-          pio run -e m5stack-core2
-          echo "Build artifacts:"
-          ls -la .pio/build/m5stack-core2/ || true
-          ls -la firmware_merged.bin || true
+      - name: Build
+        run: pio run -e m5stack-core2
 
-      - name: Collect artifacts for Pages
+      - name: Collect firmware
         run: |
           mkdir -p website/firmware
           if [ -f firmware_merged.bin ]; then
-            cp -f firmware_merged.bin website/firmware/mantis-core2-merged.bin
-          elif [ -f .pio/build/m5stack-core2/firmware.bin ]; then
-            cp -f .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-merged.bin
-            echo "WARNING: using app binary as merged fallback"
+            cp firmware_merged.bin website/firmware/mantis-core2-merged.bin
           else
-            echo "ERROR: no firmware binary produced"
-            exit 1
+            cp .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-merged.bin
           fi
-          cp -f .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-app.bin 2>/dev/null || true
-          ls -la website/firmware/
-
-      - name: Build ESP32-CAM fleet image (optional)
-        run: |
-          if [ -d cam ] || [ -f platformio-cam.ini ]; then
-            echo "CAM sub-project detected — building…"
-            if [ -d cam ]; then
-              (cd cam && pio run) || true
-              cp cam/.pio/build/*/firmware.bin website/firmware/esp32cam-fleet.bin 2>/dev/null || true
-            fi
-          else
-            echo "No CAM sub-project — skipping."
-          fi
+          cp .pio/build/m5stack-core2/firmware.bin website/firmware/mantis-core2-app.bin 2>/dev/null || true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
