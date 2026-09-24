@@ -914,7 +914,7 @@ void decodeJpegFit(uint8_t *buf, size_t len) {
   M5.Display.setClipRect(0, CONTENT_TOP, CONTENT_W, CONTENT_H);
   jpeg.decode(0, CONTENT_TOP, scale);
   jpeg.close();
-  M5.Display.clearClipRect();
+  M5.Display.setClipRect(0, 0, 320, 240);
 }
 
 bool fetchSnapshot() {

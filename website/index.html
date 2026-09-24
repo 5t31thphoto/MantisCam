@@ -3,166 +3,365 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MANTIS — Fleet Deploy</title>
+<title>MantisCam — get started</title>
 <style>
   :root {
-    --bg:#0a1a0f; --panel:#122018; --accent:#5fe07a; --text:#e8ffe8;
-    --dim:#7a9a7a; --btn:#1e3a28; --btn-hi:#2a5a38;
+    --bg: #050a0a;
+    --panel: #0a1212;
+    --panel2: #0e1818;
+    --teal: #007373;
+    --teal-dk: #004d4d;
+    --teal-lt: #2aa8a8;
+    --purp: #5D005D;
+    --purp-lt: #8a2a8a;
+    --green: #50c85a;
+    --text: #e8fff0;
+    --dim: #7a9a96;
+    --line: #1a3030;
+    --warn: #c9a227;
   }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--text)}
-  header{background:linear-gradient(135deg,#0d2818,#1a3a28);padding:24px;border-bottom:1px solid #2a4a35;display:flex;gap:16px;align-items:center}
-  header .logo{font-size:40px}
-  h1{margin:0;color:var(--accent);letter-spacing:.06em}
-  header p{margin:4px 0 0;color:var(--dim);font-size:.95rem}
-  main{max-width:960px;margin:0 auto;padding:24px 16px 48px}
-  section{background:var(--panel);border-radius:12px;padding:20px;margin-bottom:18px;border:1px solid #1e3a28}
-  h2{margin:0 0 10px;color:var(--accent);font-size:1.2rem}
-  p,li{line-height:1.55;color:#c8e0c8}
-  a{color:var(--accent)}
-  .btn{display:inline-block;background:var(--btn);color:var(--text);border:1px solid var(--accent);
-    padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;margin:6px 8px 6px 0;cursor:pointer}
-  .btn:hover{background:var(--btn-hi)}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  @media(max-width:640px){.grid{grid-template-columns:1fr}}
-  .card{background:#0e1e14;border-radius:10px;padding:14px;border:1px solid #1e3a28}
-  .card h3{margin:0 0 8px;color:var(--accent);font-size:1.05rem}
-  code,.mono{font-family:ui-monospace,Consolas,monospace;background:#0a140c;padding:2px 6px;border-radius:4px;font-size:.9em}
-  .note{background:#1a2a18;border-left:3px solid var(--accent);padding:10px 14px;margin:12px 0;border-radius:0 6px 6px 0;font-size:.92rem;color:var(--dim)}
-  label{display:block;margin:8px 0 4px;color:var(--dim);font-size:.9rem}
-  input[type=text],input[type=password]{width:100%;max-width:340px;padding:8px 10px;background:#0a140c;border:1px solid #2a4a35;border-radius:6px;color:var(--text)}
-  .flasher-box{background:#0a140c;border-radius:8px;padding:14px;margin-top:10px;border:1px dashed #2a4a35}
-  footer{text-align:center;color:var(--dim);font-size:.85rem;padding:20px;border-top:1px solid #1e3a28}
-  ol li{margin-bottom:8px}
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+  }
+  /* early-2000s chrome bars */
+  .topbar {
+    background: linear-gradient(180deg, #0c1a1a 0%, var(--panel) 100%);
+    border-bottom: 3px solid var(--purp);
+    box-shadow: inset 0 1px 0 var(--teal-lt);
+    padding: 18px 20px;
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .topbar img {
+    width: 72px; height: 72px;
+    image-rendering: pixelated;
+    background: var(--panel2);
+    border: 2px solid var(--teal);
+    box-shadow: 2px 2px 0 var(--purp);
+  }
+  .topbar h1 {
+    margin: 0;
+    font-size: 1.75rem;
+    color: var(--green);
+    letter-spacing: 0.04em;
+    text-shadow: 1px 1px 0 #003020;
+  }
+  .topbar .tag {
+    margin: 4px 0 0;
+    color: var(--teal-lt);
+    font-size: 0.95rem;
+  }
+  .badge {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--dim);
+    border: 1px solid var(--line);
+    padding: 6px 10px;
+    background: var(--panel2);
+  }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 56px; }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-top: 2px solid var(--teal);
+    margin-bottom: 18px;
+    padding: 18px 20px 20px;
+    box-shadow: 3px 3px 0 #000;
+  }
+  section h2 {
+    margin: 0 0 12px;
+    font-size: 1.15rem;
+    color: var(--green);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+  }
+  h3 { margin: 14px 0 8px; color: var(--teal-lt); font-size: 1rem; }
+  p, li { color: #c5ddd8; }
+  a { color: var(--teal-lt); }
+  a:hover { color: var(--green); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    padding: 14px;
+    box-shadow: inset 1px 1px 0 #152222;
+  }
+  .card h3 { margin-top: 0; }
+  .btn {
+    display: inline-block;
+    background: var(--teal-dk);
+    color: var(--text);
+    border: 1px solid var(--teal);
+    border-top-color: var(--teal-lt);
+    border-left-color: var(--teal-lt);
+    padding: 10px 16px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 4px 8px 4px 0;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--purp);
+  }
+  .btn:hover { background: var(--teal); }
+  .btn.purp {
+    background: #3a003a;
+    border-color: var(--purp-lt);
+    border-top-color: var(--purp-lt);
+    border-left-color: var(--purp-lt);
+  }
+  .btn.purp:hover { background: var(--purp); }
+  code, .mono {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    background: #061010;
+    padding: 2px 6px;
+    border: 1px solid var(--line);
+    font-size: 0.88em;
+    color: #b8e0d8;
+  }
+  pre.mono {
+    display: block;
+    padding: 12px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    font-size: 0.82rem;
+    color: var(--dim);
+    margin: 10px 0 0;
+  }
+  .callout {
+    border-left: 4px solid var(--teal);
+    background: #081414;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 0.92rem;
+    color: var(--dim);
+  }
+  .callout.tip { border-left-color: var(--green); }
+  .callout.dev { border-left-color: var(--purp-lt); }
+  label { display: block; margin: 10px 0 4px; color: var(--dim); font-size: 0.88rem; }
+  input[type=text], input[type=password] {
+    width: 100%; max-width: 360px;
+    padding: 9px 10px;
+    background: #061010;
+    border: 1px solid var(--line);
+    border-top-color: #000;
+    border-left-color: #000;
+    color: var(--text);
+  }
+  input:focus { outline: 1px solid var(--teal); }
+  .flasher-box {
+    background: #061010;
+    border: 1px dashed var(--teal-dk);
+    padding: 14px;
+    margin-top: 10px;
+  }
+  ol.steps { padding-left: 1.2rem; }
+  ol.steps li { margin-bottom: 10px; }
+  .two-col-note {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  @media (max-width: 700px) { .two-col-note { grid-template-columns: 1fr; } }
+  footer {
+    text-align: center;
+    color: var(--dim);
+    font-size: 0.82rem;
+    padding: 20px;
+    border-top: 2px solid var(--purp);
+    background: var(--panel);
+  }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 </style>
 <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
 </head>
 <body>
-<header>
-  <div class="logo">🦗</div>
+
+<div class="topbar">
+  <img src="mantis.png" width="72" height="72" alt="MantisCam">
   <div>
-    <h1>MANTIS</h1>
-    <p>Fleet deploy — Core2 companion + ESP32-CAM</p>
+    <h1>MantisCam</h1>
+    <p class="tag">Handheld viewer + camera fleet — flash, configure, go</p>
   </div>
-</header>
+  <div class="badge">Chrome / Edge · USB cable · 5 minutes</div>
+</div>
+
 <main>
 
 <section>
-  <h2>📱 Core2 firmware</h2>
+  <h2>What you’re setting up</h2>
+  <p>
+    <strong>MantisCam</strong> is a small system with two parts:
+  </p>
+  <ul>
+    <li><strong>The handheld (M5Stack Core2)</strong> — a touchscreen gadget that shows the live camera view, saves photos/video/audio, and switches between cameras.</li>
+    <li><strong>The camera (ESP32-CAM)</strong> — a tiny board with a lens. It creates its own Wi‑Fi hotspot; the handheld joins that hotspot and pulls the video stream.</li>
+  </ul>
+  <p>
+    You don’t need a home router in the middle for the basic setup. Cable in, flash software, power both devices, connect.
+  </p>
+  <div class="two-col-note">
+    <div class="callout tip">
+      <strong>New to this?</strong> Follow the numbered steps below. Use a computer with a USB port and <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> (Safari and Firefox usually can’t talk to USB devices from a web page).
+    </div>
+    <div class="callout dev">
+      <strong>Already ship firmware?</strong> Binaries and manifests are under <code>firmware/</code>. Core2 multi-profile NVS + CAM <code>POST /config</code> for SoftAP identity. Same binaries for every unit; per-device config is runtime.
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Before you start</h2>
+  <ol class="steps">
+    <li><strong>USB data cable</strong> — not charge-only. If the computer never offers a serial port, try another cable first.</li>
+    <li><strong>Browser</strong> — Chrome or Edge on Windows, macOS, or Linux.</li>
+    <li><strong>Drivers (Windows only, if the board isn’t seen)</strong> — many boards need a CH340 or CP210x USB-serial driver from the chip maker. macOS/Linux usually just work.</li>
+    <li><strong>Hold the right board</strong> — Core2 is the thick touchscreen brick. ESP32-CAM is the small board with the camera module (often on a base board with a USB plug).</li>
+  </ol>
+</section>
+
+<section>
+  <h2>1 · Put software on the handheld (Core2)</h2>
   <div class="grid">
     <div class="card">
-      <h3>Download</h3>
-      <a class="btn" href="firmware/mantis-core2-merged.bin" download>↓ merged .bin</a>
-      <p style="font-size:.85rem;color:var(--dim)">Flash at 0x0 (bootloader + partitions + app).</p>
-    </div>
-    <div class="card">
-      <h3>Web flasher</h3>
+      <h3>From this page (easiest)</h3>
+      <ol class="steps">
+        <li>Plug the Core2 into the computer with USB.</li>
+        <li>Click <strong>Install on Core2</strong> below.</li>
+        <li>In the browser prompt, pick the device that looks like a serial port (often “USB”, “UART”, “SLAB”, or “CH340”).</li>
+        <li>Confirm install and wait until it finishes. The screen may go blank while writing — that’s normal.</li>
+      </ol>
       <div class="flasher-box">
         <esp-web-install-button manifest="firmware/manifest-core2.json">
-          <button slot="activate" class="btn">⚡ Flash Core2</button>
-          <span slot="unsupported">Need Chrome/Edge + Web Serial</span>
+          <button slot="activate" class="btn">Install on Core2</button>
+          <span slot="unsupported">This browser can’t use USB serial. Open this page in Chrome or Edge.</span>
+          <span slot="not-allowed">Serial permission was denied — click again and allow access.</span>
         </esp-web-install-button>
       </div>
+      <p style="margin-top:12px">
+        <a class="btn purp" href="firmware/mantis-core2-merged.bin" download>Download .bin instead</a>
+      </p>
+      <p class="callout">Prefer <code>esptool</code> / PlatformIO? Use the merged binary at flash offset <code>0x0</code>.</p>
     </div>
-  </div>
-  <div class="note">
-    Core2: capacitive <b>A</b> left · <b>B</b> middle · <b>C</b> right — labels sit under each zone.
-    <b>Cameras</b> screen: scan WiFi, tap a profile to disconnect from the current SoftAP and join that camera.
+    <div class="card">
+      <h3>What success looks like</h3>
+      <p>After power-up you should see the <strong>MantisCam</strong> splash, then either a live view (if a default camera is on) or the <strong>Cameras</strong> list.</p>
+      <p>Bottom of the screen: three zones match the capacitive buttons — <strong>A</strong> previous screen, <strong>B</strong> select / record, <strong>C</strong> next screen.</p>
+      <p>Status chips in the header: <strong>LINK</strong> (Wi‑Fi to the camera) and <strong>DISK</strong> (SD card).</p>
+    </div>
   </div>
 </section>
 
 <section>
-  <h2>📷 ESP32-CAM — how config is supposed to work</h2>
-  <p><strong>Optimal / standard pattern for this fleet:</strong></p>
-  <ol>
-    <li><b>One firmware binary</b> for all cameras (no per-device rebuild).</li>
-    <li>Defaults live in <b>NVS</b> (Arduino <code>Preferences</code> namespace <code>camcfg</code>):
-      <code>ap_ssid</code>, <code>ap_pass</code>, <code>st_ssid</code>, <code>st_pass</code>, <code>name</code>, <code>admin</code>.
-      Compile-time defaults are only the first-boot seed (e.g. <code>Mantis_1_Hotspot</code> / <code>mantis33</code>).</li>
-    <li><b>After flash</b>, change identity at runtime:
-      <ul>
-        <li>POST <code>/config</code> with body fields + header <code>X-Admin-Pass</code> (device reboots into new SoftAP), or</li>
-        <li>Core2 WiFi screen / Manager UI.</li>
-      </ul>
-    </li>
-    <li><b>Do not</b> bake a different SSID into the binary for every unit — that forces a unique build per camera and breaks the web flasher story.</li>
-  </ol>
-
-  <div class="note">
-    <b>Why not configure SSID inside the web flasher binary itself?</b>
-    Browser flashers (esp-web-tools) write firmware images. Per-device NVS images can be generated, but that needs a host tool
-    (<code>nvs_partition_gen</code> / Python) and exact partition offsets. Runtime <code>/config</code> + NVS is simpler, standard on ESP32, and matches your existing Manager firmware.
+  <h2>2 · Put software on the camera (ESP32-CAM)</h2>
+  <p>
+    Same idea: USB to the computer, install from the browser. Your camera firmware must be published as
+    <code>firmware/esp32cam-fleet.bin</code> for the button below to work. If that file isn’t on this site yet, flash with your usual CAM pipeline (e.g. the Manager app), then come back for configuration.
+  </p>
+  <div class="flasher-box">
+    <esp-web-install-button manifest="firmware/manifest-cam.json">
+      <button slot="activate" class="btn">Install on ESP32-CAM</button>
+      <span slot="unsupported">Use Chrome or Edge for USB install.</span>
+    </esp-web-install-button>
   </div>
-
-  <div class="grid">
-    <div class="card">
-      <h3>Provision checklist</h3>
-      <ol>
-        <li>Flash the same CAM fleet binary (or Manager-generated image) on every unit.</li>
-        <li>Power the cam — it opens SoftAP with the baked defaults.</li>
-        <li>Join that AP from phone/Core2, open <code>http://192.168.5.1/</code>.</li>
-        <li>Set permanent SoftAP SSID / name / admin via <code>/config</code> (or Manager).</li>
-        <li>On Core2: <b>Cameras → Scan</b> — new hotspot appears; tap to switch profile.</li>
-      </ol>
-    </div>
-    <div class="card">
-      <h3>Suggested SoftAP naming</h3>
-      <p>Use a predictable prefix so Core2 scan auto-picks them up:</p>
-      <ul>
-        <li><code>Mantis_1_Hotspot</code></li>
-        <li><code>Mantis_2_Hotspot</code></li>
-        <li><code>Mantis_Kitchen</code></li>
-      </ul>
-      <p>Default password for new scan entries: <code>mantis33</code> (edit on Core2 WiFi screen if different).</p>
-      <p>AP IP stays <code>192.168.5.1</code> unless you change SoftAP config in firmware.</p>
-    </div>
+  <p style="margin-top:10px">
+    <a class="btn purp" href="firmware/esp32cam-fleet.bin" download>Download CAM .bin</a>
+  </p>
+  <div class="callout tip">
+    <strong>Default camera Wi‑Fi (SoftAP)</strong> after a stock flash is often
+    network name <code>Mantis_1_Hotspot</code>, password <code>mantis33</code>,
+    camera address <code>192.168.5.1</code>. The handheld is set up to look for that first.
   </div>
+</section>
 
-  <div class="card" style="margin-top:14px">
-    <h3>Config form (reference values for /config or Manager)</h3>
-    <p style="font-size:.9rem;color:var(--dim)">These fields do not rebuild firmware in the browser. Copy them into Manager, or POST to the camera after first join.</p>
-    <label>SoftAP SSID</label>
+<section>
+  <h2>3 · Name each camera (first time)</h2>
+  <p>
+    If you only have one camera, you can skip this. With several cameras, give each its own hotspot name so the handheld can list and switch between them.
+  </p>
+  <p>
+    Power the camera alone, join its Wi‑Fi from a phone or laptop, then open
+    <code>http://192.168.5.1</code> or send a config request (form below builds a ready-to-run command).
+  </p>
+  <div class="card">
+    <h3>Config helper</h3>
+    <label>Camera hotspot name (SSID)</label>
     <input type="text" id="ap-ssid" value="Mantis_2_Hotspot">
-    <label>SoftAP password (8+)</label>
+    <label>Hotspot password</label>
     <input type="password" id="ap-pass" value="mantis33">
-    <label>Camera name</label>
-    <input type="text" id="cam-name" value="Mantis Cam 2">
-    <label>Admin password</label>
+    <label>Friendly name (shown on the handheld)</label>
+    <input type="text" id="cam-name" value="Workshop cam">
+    <label>Admin password (for config changes)</label>
     <input type="password" id="admin" value="admin1234">
-    <label>Optional upstream WiFi SSID</label>
-    <input type="text" id="st-ssid" placeholder="home router">
-    <label>Optional upstream password</label>
+    <label>Optional: home Wi‑Fi name (only if this firmware bridges upstream)</label>
+    <input type="text" id="st-ssid" placeholder="leave blank for hotspot-only">
+    <label>Optional: home Wi‑Fi password</label>
     <input type="password" id="st-pass">
     <p style="margin-top:12px">
-      <button class="btn" type="button" onclick="copyConfigCurl()">Copy curl for POST /config</button>
+      <button class="btn" type="button" onclick="copyConfigCurl()">Copy setup command</button>
     </p>
-    <pre id="curl-out" class="mono" style="white-space:pre-wrap;font-size:.8rem;color:var(--dim)"></pre>
+    <pre id="curl-out" class="mono">Fill the fields, then click “Copy setup command”. Paste into Terminal (macOS/Linux) or PowerShell/WSL (Windows) while you’re connected to the camera’s hotspot.</pre>
   </div>
-
-  <div class="card" style="margin-top:14px">
-    <h3>Web flasher (CAM binary if present)</h3>
-    <div class="flasher-box">
-      <esp-web-install-button manifest="firmware/manifest-cam.json">
-        <button slot="activate" class="btn">⚡ Flash ESP32-CAM</button>
-        <span slot="unsupported">Web Serial required</span>
-      </esp-web-install-button>
-    </div>
-    <p style="margin-top:8px"><a class="btn" href="firmware/esp32cam-fleet.bin" download>↓ esp32cam-fleet.bin</a></p>
+  <div class="callout dev">
+    Endpoint: <code>POST http://192.168.5.1/config</code> with header <code>X-Admin-Pass</code>. Body: form fields <code>ap_ssid</code>, <code>ap_pass</code>, <code>name</code>, <code>admin</code>, optional <code>st_ssid</code> / <code>st_pass</code>. Stored in NVS — no unique binary per camera.
   </div>
 </section>
 
 <section>
-  <h2>🗂️ Fleet flow</h2>
-  <ol>
-    <li><b>Website</b> — flash identical CAM firmware; note default SoftAP.</li>
-    <li><b>Per camera</b> — one-time <code>/config</code> (or Manager) to set unique SoftAP SSID/name.</li>
-    <li><b>Core2</b> — Cameras screen → Scan → tap profile to switch (disconnects old AP, joins new).</li>
-    <li><b>Updates</b> — new binary via this site (no OTA required).</li>
+  <h2>4 · Use the handheld every day</h2>
+  <ol class="steps">
+    <li>Power the camera, then the Core2.</li>
+    <li>Open <strong>Cameras</strong> — scan if needed, tap a camera to connect.</li>
+    <li><strong>Stream</strong> — live view; <strong>B</strong> starts/stops video recording to the SD card.</li>
+    <li><strong>Snapshot</strong> — <strong>B</strong> previews; on-screen <strong>Save to SD</strong> writes the file.</li>
+    <li><strong>Audio</strong> — record or play clips from the SD card.</li>
   </ol>
+  <p>
+    MicroSD goes in the Core2 (FAT32). Folders <code>/images</code>, <code>/videos</code>, and <code>/audio</code> are created automatically.
+  </p>
+</section>
+
+<section>
+  <h2>If something doesn’t work</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Install button does nothing / no ports listed</h3>
+      <ul>
+        <li>Wrong cable or USB hub — plug straight into the computer.</li>
+        <li>Windows: install CH340 or CP210x driver, unplug/replug.</li>
+        <li>Close other serial tools (Arduino IDE, serial monitors) that may lock the port.</li>
+        <li>Some CAM boards need a “boot” button held while connecting — check your board’s docs.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Handheld never links to the camera</h3>
+      <ul>
+        <li>Confirm the camera hotspot appears in the phone’s Wi‑Fi list.</li>
+        <li>Password and SSID must match a profile on the Core2 (Cameras → scan / edit).</li>
+        <li>Stay near the camera; SoftAP range is short.</li>
+        <li>Header shows <strong>DOWN</strong> until Wi‑Fi associates; <strong>LINK</strong> when it’s up.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout">
+    Updates later: download a new <code>.bin</code> from this site and flash again. No OTA path required for this project.
+  </div>
 </section>
 
 </main>
-<footer>MANTIS · NVS runtime config · multi-profile Core2</footer>
+
+<footer>
+  MantisCam · teal / purple fleet kit · consumer-friendly path, developer-grade binaries
+</footer>
+
 <script>
 function copyConfigCurl() {
   const ap = document.getElementById('ap-ssid').value;
@@ -177,7 +376,7 @@ function copyConfigCurl() {
   }).toString();
   const curl = `curl -X POST 'http://192.168.5.1/config' \\\n  -H 'X-Admin-Pass: ${admin}' \\\n  -H 'Content-Type: application/x-www-form-urlencoded' \\\n  -d '${body}'`;
   document.getElementById('curl-out').textContent = curl;
-  navigator.clipboard.writeText(curl).catch(()=>{});
+  navigator.clipboard.writeText(curl).catch(() => {});
 }
 </script>
 </body>
