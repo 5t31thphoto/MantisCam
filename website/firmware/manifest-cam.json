@@ -1,16 +1,15 @@
 {
-  "name": "MANTIS ESP32-CAM Fleet",
+  "name": "MantisCam Camera",
   "version": "1.0.0",
   "new_install_prompt_erase": true,
   "builds": [
     {
       "chipFamily": "ESP32",
-      "parts": [
-        {
-          "path": "esp32cam-fleet.bin",
-          "offset": 0
-        }
-      ]
+      "parts": [ { "path": "esp32cam-classic.bin", "offset": 0 } ]
+    },
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [ { "path": "esp32cam-s3.bin", "offset": 0 } ]
     }
   ]
 }
