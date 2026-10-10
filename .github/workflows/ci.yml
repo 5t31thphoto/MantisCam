@@ -92,7 +92,7 @@ jobs:
           for e in $(grep -oP '^\[env:\Kcam-[a-z0-9_]+' platformio.ini); do
             b=".pio/build/$e"; out="website/firmware/$e.bin"
             if grep -q '"esp32s3"' "$b/idedata.json" 2>/dev/null || [[ "$e" == *s3* ]]; then
-              chip=esp32s3; boot_off=0x0;    mode=qio
+              chip=esp32s3; boot_off=0x0;    mode=dio
             else
               chip=esp32;   boot_off=0x1000; mode=dio
             fi
