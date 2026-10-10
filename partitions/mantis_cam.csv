@@ -1,0 +1,13 @@
+# MantisCam camera partition table (fits 4 MB flash; works on 8/16 MB too)
+#
+# "mcfg" is where the web flasher writes the settings you fill in on the page.
+# The firmware reads it on first boot, copies the values into NVS, then wipes
+# it so Wi-Fi passwords don't sit in a raw flash sector.
+#
+# KEEP IN SYNC: website/index.html (MCFG_OFFSET) and src/cam/mcfg.h
+#
+# Name,    Type, SubType, Offset,   Size
+nvs,       data, nvs,     0x9000,   0x5000
+otadata,   data, ota,     0xe000,   0x2000
+app0,      app,  ota_0,   0x10000,  0x300000
+mcfg,      data, 0x40,    0x310000, 0x1000

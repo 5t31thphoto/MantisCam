@@ -100,6 +100,7 @@
     box-shadow: inset 1px 1px 0 #152222;
   }
   .card h3 { margin-top: 0; }
+  .card h3 ~ h3 { margin-top: 22px; }
   .btn {
     display: inline-block;
     background: var(--teal-dk);
@@ -157,7 +158,29 @@
     border: 1px solid var(--line);
     color: var(--text);
   }
-  input:focus { outline: 1px solid var(--teal); }
+  input:focus, select:focus { outline: 1px solid var(--teal); }
+  select {
+    width: 100%; max-width: 360px;
+    padding: 9px 10px;
+    background: #061010;
+    border: 1px solid var(--line);
+    color: var(--text);
+  }
+  input[type=range] { width: 100%; max-width: 360px; accent-color: var(--teal-lt); }
+  .hint { color: var(--dim); font-size: 0.82rem; margin: 6px 0 0; }
+  .hint-inline { color: var(--dim); font-size: 0.8rem; font-weight: normal; }
+  .row { display: flex; gap: 8px; max-width: 360px; align-items: center; }
+  .row input { flex: 1; min-width: 0; }
+  .btn.small { padding: 8px 12px; margin: 0; font-size: 0.85rem; }
+  .btn.ghost { background: transparent; box-shadow: none; }
+  .btn.is-disabled { opacity: 0.45; }
+  .checks { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; }
+  label.check { display: flex; gap: 8px; align-items: center; color: #c5ddd8; margin: 4px 0; font-size: 0.9rem; }
+  input.bad { border-color: #c0405a; outline: 1px solid #c0405a; }
+  .errors { border-left: 4px solid #c0405a; background: #1a0a10; color: #f0b8c4; padding: 10px 14px; margin: 14px 0 0; font-size: 0.9rem; }
+  .errors ul { margin: 4px 0 0; padding-left: 1.1rem; }
+  .errors li { color: #f0b8c4; }
+  .install-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .flasher-box {
     background: #061010;
     border: 1px dashed var(--teal-dk);
@@ -185,6 +208,7 @@
   }
 </style>
 <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<script src="mcfg.js"></script>
 </head>
 <body>
 
@@ -192,7 +216,7 @@
   <img src="mantis.png" width="72" height="72" alt="MantisCam">
   <div>
     <h1>MantisCam</h1>
-    <p class="tag">Handheld viewer and camera fleet — install, name cameras, go</p>
+    <p class="tag">Handheld viewer and camera fleet — set up and install in one step</p>
   </div>
   <div class="badge">Chrome or Edge · USB · a few minutes</div>
 </div>
@@ -275,56 +299,133 @@
   </div>
 </section>
 
-<section>
-  <h2>Install on a camera</h2>
+<section id="camera-setup">
+  <h2>Set up &amp; install a camera</h2>
   <p>
-    This project builds camera firmware for <strong>classic ESP32-CAM</strong> boards and
-    <strong>ESP32-S3</strong> boards including the <strong>XIAO ESP32S3 Sense</strong>.
-    Pin profiles match the Mantis manager and are auto-probed at boot.
-    The installer selects the package from the chip the browser sees:
-    <strong>ESP32</strong> or <strong>ESP32-S3</strong>.
+    Fill in the settings, plug the camera in, and press <strong>Install</strong>.
+    The settings are written to the camera <strong>at the same time as the firmware</strong> and take effect on its first boot.
+    No serial commands, no extra steps. Each board has its own firmware built for its pins:
+    pick your board and that firmware is installed. If the board plugged in is the wrong chip for your pick, the installer refuses.
   </p>
-  <p class="muted">
-    Supported families align with the Mantis CAM manager: AI-Thinker ESP32-CAM, ESP-EYE, WROVER / Freenove, M5Stack camera variants, TTGO T-Journal,
-    AI-Thinker / Freenove S3, nulllab S3-CAM, <strong>XIAO ESP32S3 Sense</strong>, DFRobot FireBeetle / AI CAM S3, and similar S3-CAM boards.
-    Flash the build that matches your board; naming each unit’s hotspot is a separate step after install.
+
+  <form id="cfg-form" class="cfg" autocomplete="off" onsubmit="return false">
+    <div class="grid">
+      <div class="card">
+        <h3>Camera</h3>
+        <label for="f-board">Board</label>
+        <select id="f-board">
+          <option value="" selected disabled>— pick your board —</option>
+          <optgroup label="ESP32-S3 boards">
+            <option value="xiao_s3">Seeed XIAO ESP32S3 Sense</option>
+            <option value="s3_eye">ESP32-S3-EYE / Freenove S3 / AI-Thinker S3</option>
+            <option value="nulllab_s3">nulllab ESP32-S3-CAM</option>
+            <option value="firebeetle_s3">DFRobot FireBeetle 2 ESP32-S3 (hardware V1.1+)</option>
+            <option value="dfr_aicam_s3">DFRobot ESP32-S3 AI CAM</option>
+            <option value="s3_cam_lcd">ESP32-S3-CAM (LCD variant)</option>
+          </optgroup>
+          <optgroup label="Classic ESP32 boards">
+            <option value="ai_thinker">AI-Thinker ESP32-CAM</option>
+            <option value="esp_eye">ESP-EYE</option>
+            <option value="wrover_kit">ESP32 WROVER-KIT / Freenove WROVER</option>
+            <option value="m5_psram">M5Stack Camera (PSRAM / Model A)</option>
+            <option value="m5_v2">M5Stack Camera (V2 / Model B)</option>
+            <option value="m5_wide">M5Stack Wide</option>
+            <option value="m5_nopsram">M5Stack ESP32-CAM (no PSRAM)</option>
+            <option value="ttgo_tjournal">TTGO T-Journal</option>
+          </optgroup>
+        </select>
+        <p class="hint">Not needed for <em>Update settings only</em>.</p>
+
+        <label for="f-name">Name shown on the Core2</label>
+        <input type="text" id="f-name" maxlength="23" value="Mantis Cam 1">
+
+        <h3>Image</h3>
+        <label for="f-framesize">Resolution</label>
+        <select id="f-framesize">
+          <option value="QVGA">QVGA 320×240 — fastest, matches the Core2 screen</option>
+          <option value="VGA" selected>VGA 640×480 — recommended</option>
+          <option value="SVGA">SVGA 800×600</option>
+          <option value="XGA">XGA 1024×768</option>
+          <option value="HD">HD 1280×720</option>
+          <option value="SXGA">SXGA 1280×1024</option>
+          <option value="UXGA">UXGA 1600×1200 — slow over Wi‑Fi</option>
+        </select>
+        <label for="f-quality">JPEG quality: <span id="q-val">12</span> <span class="hint-inline">(lower = sharper, bigger frames)</span></label>
+        <input type="range" id="f-quality" min="6" max="40" value="12">
+        <label for="f-bright">Brightness: <span id="b-val">0</span></label>
+        <input type="range" id="f-bright" min="-2" max="2" value="0">
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="f-vflip"> Flip upside-down</label>
+          <label class="check"><input type="checkbox" id="f-hmirror"> Mirror left/right</label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Camera hotspot <span class="hint-inline">(the Core2 connects here)</span></h3>
+        <label for="f-ap-ssid">Hotspot name (SSID)</label>
+        <input type="text" id="f-ap-ssid" maxlength="32" value="Mantis_1_Hotspot">
+        <p class="hint">Give every camera its own: <code>Mantis_1_Hotspot</code>, <code>Mantis_2_Hotspot</code>, … The Core2 looks for <code>Mantis_1</code> first and finds the others with <em>Scan WiFi</em>.</p>
+        <label for="f-ap-pass">Hotspot password <span class="hint-inline">(8–63 characters)</span></label>
+        <input type="password" id="f-ap-pass" maxlength="63" value="mantis33">
+        <p class="hint">The Core2 assumes <code>mantis33</code> for scanned cameras. If you change it, enter the same password on the Core2’s WiFi / Edit screen.</p>
+
+        <h3>Admin password</h3>
+        <label for="f-admin">Protects remote setting changes and restarts <span class="hint-inline">(8–63)</span></label>
+        <div class="row">
+          <input type="password" id="f-admin" maxlength="63">
+          <button type="button" class="btn small" id="gen-admin">New</button>
+        </div>
+
+        <h3>Home Wi‑Fi <span class="hint-inline">(optional)</span></h3>
+        <label for="f-st-ssid">Network name</label>
+        <input type="text" id="f-st-ssid" maxlength="32" placeholder="blank = hotspot only">
+        <label for="f-st-pass">Network password</label>
+        <input type="password" id="f-st-pass" maxlength="63">
+        <p class="hint">Leave blank unless you need it. Securing cameras on the home network is being reworked; until then the hotspot-only setup keeps them off your LAN entirely.</p>
+
+        <label class="check" style="margin-top:14px"><input type="checkbox" id="show-pw"> Show passwords</label>
+      </div>
+    </div>
+
+    <div id="cfg-errors" class="errors" role="alert" hidden></div>
+
+    <div class="flasher-box">
+      <div class="install-row">
+        <esp-web-install-button id="install-full">
+          <button slot="activate" class="btn" type="button">Install firmware + settings</button>
+          <span slot="unsupported">Open this page in Chrome or Edge on a desktop to install over USB.</span>
+          <span slot="not-allowed">This page must be served over HTTPS to use USB.</span>
+        </esp-web-install-button>
+        <esp-web-install-button id="install-cfg">
+          <button slot="activate" class="btn purp" type="button">Update settings only</button>
+          <span slot="unsupported"></span>
+          <span slot="not-allowed"></span>
+        </esp-web-install-button>
+        <button type="button" class="btn ghost" id="next-cam" title="Bump the number in the name and hotspot for the next camera">Next camera →</button>
+      </div>
+      <p class="hint" id="cfg-summary"></p>
+      <p class="hint">
+        <strong>Update settings only</strong> keeps the installed firmware and rewrites just the settings (camera firmware 1.1 or newer).
+        Passwords go straight from this page to the camera over USB; nothing is uploaded anywhere.
+      </p>
+    </div>
+  </form>
+
+  <p style="margin-top:12px">
+    <a class="btn purp is-disabled" id="dl-bin" href="#" download>Download .bin for the selected board</a>
   </p>
-  <div class="flasher-box">
-    <esp-web-install-button manifest="firmware/manifest-cam.json">
-      <button slot="activate" class="btn">Install camera firmware</button>
-      <span slot="unsupported">Use Chrome or Edge for USB install.</span>
-    </esp-web-install-button>
-  </div>
-  <p style="margin-top:10px">
-    <a class="btn purp" href="firmware/esp32cam-classic.bin" download>Classic ESP32-CAM .bin</a>
-    <a class="btn purp" href="firmware/esp32cam-s3.bin" download>ESP32-S3 / XIAO .bin</a>
-  </p>
-  <div class="callout">
-    Default hotspot after a stock image is often <code>Mantis_1_Hotspot</code> / <code>mantis33</code>, address <code>192.168.5.1</code>.
-    The Core2 looks for that profile first.
-  </div>
+  <p class="muted">Downloaded .bin files contain no settings; a camera flashed that way starts with the defaults (<code>Mantis_1_Hotspot</code> / <code>mantis33</code>, address <code>192.168.5.1</code>).</p>
 </section>
 
 <section>
-  <h2>Name each camera</h2>
-  <p>
-    With more than one camera, give each its own hotspot name so the Core2 can list and switch between them.
-    Join the camera’s Wi‑Fi from a phone or laptop, then run the command below (or use the Mantis CAM manager).
-  </p>
-  <div class="card">
-    <label>Hotspot name (SSID)</label>
-    <input type="text" id="ap-ssid" value="Mantis_2_Hotspot">
-    <label>Hotspot password</label>
-    <input type="password" id="ap-pass" value="mantis33">
-    <label>Friendly name on the handheld</label>
-    <input type="text" id="cam-name" value="Workshop cam">
-    <label>Admin password</label>
-    <input type="password" id="admin" value="admin1234">
-    <p style="margin-top:12px">
-      <button class="btn" type="button" onclick="copyConfigCurl()">Copy setup command</button>
-    </p>
-    <pre id="curl-out" class="mono">Fill the fields, then copy the command. Run it while connected to that camera’s hotspot.</pre>
-  </div>
+  <h2>XIAO ESP32S3 Sense tips</h2>
+  <ul>
+    <li><strong>Screw on the antenna.</strong> The XIAO has no usable on-board antenna; without the little U.FL antenna the hotspot barely reaches across a desk.</li>
+    <li><strong>No serial port showing up?</strong> Hold the <strong>B</strong> (BOOT) button, plug in USB, release, then press Install. Press <strong>R</strong> (RESET) after the install finishes.</li>
+    <li><strong>See what it’s doing:</strong> after installing, choose <em>Logs &amp; Console</em> in the installer dialog. The camera prints its chip, PSRAM, which board profile it found, and its hotspot.</li>
+    <li>If a camera crashes three boots in a row it starts in <strong>safe mode</strong>: hotspot and web page up, camera off, with the reason on <code>http://192.168.5.1/</code>. Power-cycle or press RESET to retry.</li>
+    <li>If the log says <code>camera init FAILED</code>, reseat the camera ribbon (lift the latch, push the cable fully in, close the latch).</li>
+  </ul>
 </section>
 
 <section>
@@ -378,18 +479,238 @@
   bind('link-classic', L.classic);
 })();
 
-function copyConfigCurl() {
-  const ap = document.getElementById('ap-ssid').value;
-  const app = document.getElementById('ap-pass').value;
-  const name = document.getElementById('cam-name').value;
-  const admin = document.getElementById('admin').value;
-  const body = new URLSearchParams({
-    ap_ssid: ap, ap_pass: app, name: name, admin: admin
-  }).toString();
-  const curl = `curl -X POST 'http://192.168.5.1/config' \\\n  -H 'X-Admin-Pass: ${admin}' \\\n  -H 'Content-Type: application/x-www-form-urlencoded' \\\n  -d '${body}'`;
-  document.getElementById('curl-out').textContent = curl;
-  navigator.clipboard.writeText(curl).catch(function () {});
-}
+// ---------------------------------------------------------------------------
+// Camera setup: the settings form becomes part of the install.
+// On Install we build an esp-web-tools manifest on the fly with two parts:
+//   offset 0         merged firmware image for the detected chip
+//   offset 0x310000  4 KB settings sector (website/mcfg.js), read on first boot
+// "Update settings only" writes just the settings sector.
+// ---------------------------------------------------------------------------
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  // Firmware is built per board: firmware/cam-<board id>.bin (see platformio.ini).
+  function boardChip(id) {
+    var opt = $('f-board').querySelector('option[value="' + id + '"]');
+    return opt && opt.parentNode.label.indexOf('S3') >= 0 ? 'ESP32-S3' : 'ESP32';
+  }
+  function firmwareFor(id) { return 'firmware/cam-' + id + '.bin'; }
+  var FW_VERSION = '1.1.0';
+  var STORE_KEY = 'mantis.camSetup.v1';
+  // Passwords are never stored in the browser.
+  var REMEMBER = ['f-board', 'f-name', 'f-ap-ssid', 'f-framesize', 'f-quality', 'f-bright',
+                  'f-vflip', 'f-hmirror', 'f-st-ssid'];
+  var PRINTABLE = /^[\x20-\x7E]*$/;
+
+  function utf8len(s) { return new TextEncoder().encode(s).length; }
+
+  function randomPassword(n) {
+    var chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    var a = new Uint32Array(n);
+    crypto.getRandomValues(a);
+    var out = '';
+    for (var i = 0; i < n; i++) out += chars[a[i] % chars.length];
+    return out;
+  }
+
+  function readSettings() {
+    return {
+      name: $('f-name').value.trim(),
+      ap_ssid: $('f-ap-ssid').value.trim(),
+      ap_pass: $('f-ap-pass').value,
+      st_ssid: $('f-st-ssid').value.trim(),
+      st_pass: $('f-st-pass').value,
+      admin: $('f-admin').value,
+      framesize: $('f-framesize').value,
+      quality: parseInt($('f-quality').value, 10),
+      brightness: parseInt($('f-bright').value, 10),
+      vflip: $('f-vflip').checked,
+      hmirror: $('f-hmirror').checked
+    };
+  }
+
+  // Mirrors the firmware's checks (src/cam/main.cpp) so a bad value is caught
+  // here instead of being silently ignored by the camera.
+  function validate(s, needBoard) {
+    var e = [];
+    function bad(id, msg) { e.push({ id: id, msg: msg }); }
+    if (needBoard && !$('f-board').value) bad('f-board', 'Pick the board you are installing on.');
+    if (!s.name) bad('f-name', 'Give the camera a name.');
+    else if (!PRINTABLE.test(s.name)) bad('f-name', 'Name: plain letters, numbers and punctuation only (the Core2 font has no accents/emoji).');
+    else if (s.name.length > 23) bad('f-name', 'Name: 23 characters max (that\u2019s what the Core2 shows).');
+
+    if (!s.ap_ssid) bad('f-ap-ssid', 'Hotspot name is required.');
+    else if (!PRINTABLE.test(s.ap_ssid)) bad('f-ap-ssid', 'Hotspot name: plain letters, numbers and punctuation only.');
+    else if (s.ap_ssid.length > 32) bad('f-ap-ssid', 'Hotspot name: 32 characters max.');
+
+    if (!PRINTABLE.test(s.ap_pass) || s.ap_pass.length < 8 || s.ap_pass.length > 63)
+      bad('f-ap-pass', 'Hotspot password: 8\u201363 plain characters (Wi\u2011Fi requires at least 8).');
+
+    if (!PRINTABLE.test(s.admin) || s.admin.length < 8 || s.admin.length > 63)
+      bad('f-admin', 'Admin password: 8\u201363 plain characters.');
+
+    if (s.st_ssid && utf8len(s.st_ssid) > 32) bad('f-st-ssid', 'Home Wi\u2011Fi name: 32 bytes max.');
+    if (!s.st_ssid && s.st_pass) bad('f-st-ssid', 'Home Wi\u2011Fi password given but no network name.');
+    if (s.st_pass && (!PRINTABLE.test(s.st_pass) || s.st_pass.length < 8 || s.st_pass.length > 63))
+      bad('f-st-pass', 'Home Wi\u2011Fi password: 8\u201363 plain characters, or leave blank for an open network.');
+    if (s.st_ssid && s.st_ssid === s.ap_ssid)
+      bad('f-ap-ssid', 'Hotspot name must differ from your home Wi\u2011Fi name.');
+    return e;
+  }
+
+  function showErrors(errs) {
+    document.querySelectorAll('#cfg-form .bad').forEach(function (el) { el.classList.remove('bad'); });
+    var box = $('cfg-errors');
+    if (!errs.length) { box.hidden = true; box.innerHTML = ''; return; }
+    var ul = document.createElement('ul');
+    errs.forEach(function (er) {
+      $(er.id).classList.add('bad');
+      var li = document.createElement('li');
+      li.textContent = er.msg;
+      ul.appendChild(li);
+    });
+    box.innerHTML = '<strong>Fix these before installing:</strong>';
+    box.appendChild(ul);
+    box.hidden = false;
+  }
+
+  function summarize() {
+    var s = readSettings();
+    var errs = validate(s, true);
+    var board = $('f-board').value;
+    var full = $('install-full').querySelector('[slot=activate]');
+    var cfg = $('install-cfg').querySelector('[slot=activate]');
+    if (full) full.classList.toggle('is-disabled', errs.length > 0);
+    if (cfg) cfg.classList.toggle('is-disabled', validate(s, false).length > 0);
+    var dl = $('dl-bin');
+    dl.classList.toggle('is-disabled', !board);
+    dl.href = board ? firmwareFor(board) : '#';
+    var boardTxt = board ? $('f-board').selectedOptions[0].textContent : 'not chosen';
+    $('cfg-summary').textContent = errs.length
+      ? 'Some settings need fixing (press Install to see which).'
+      : 'Will set up \u201c' + s.name + '\u201d \u2014 hotspot ' + s.ap_ssid +
+        (s.st_ssid ? ' + home Wi\u2011Fi ' + s.st_ssid : ' (hotspot only)') +
+        ' \u2014 ' + s.framesize + ', quality ' + s.quality +
+        ' \u2014 board: ' + boardTxt + '.';
+    if ($('cfg-errors').hidden === false) showErrors(validate(s, lastNeedBoard));   // live-clear once fixed
+  }
+
+  // ---- manifest generation -------------------------------------------------
+  var liveUrls = [];
+  var lastNeedBoard = true;
+  function blobUrl(data, type) {
+    var u = URL.createObjectURL(new Blob([data], { type: type }));
+    liveUrls.push(u);
+    return u;
+  }
+  function revokeAll() { liveUrls.forEach(URL.revokeObjectURL); liveUrls = []; }
+
+  function buildManifest(withFirmware, settings) {
+    var cfgUrl = blobUrl(MantisMcfg.buildConfigBlob(settings), 'application/octet-stream');
+    var cfgPart = { path: cfgUrl, offset: MantisMcfg.MCFG_OFFSET };
+    var builds;
+    if (withFirmware) {
+      // Only the chosen board's chip is listed, so esp-web-tools refuses a
+      // board of the other chip family instead of flashing the wrong firmware.
+      var board = $('f-board').value;
+      builds = [{ chipFamily: boardChip(board), parts: [
+        { path: new URL(firmwareFor(board), location.href).href, offset: 0 }, cfgPart] }];
+    } else {
+      builds = ['ESP32', 'ESP32-S3'].map(function (chip) { return { chipFamily: chip, parts: [cfgPart] }; });
+    }
+    var manifest = {
+      name: withFirmware ? 'MantisCam Camera' : 'MantisCam Camera settings',
+      version: FW_VERSION,
+      new_install_prompt_erase: withFirmware,
+      new_install_improv_wait_time: 0,
+      builds: builds
+    };
+    return blobUrl(JSON.stringify(manifest), 'application/json');
+  }
+
+  // Runs in the capture phase, before esp-web-tools sees the click, so the
+  // manifest it reads already contains the current settings.
+  function arm(el, withFirmware) {
+    el.addEventListener('click', function (ev) {
+      var s = readSettings();
+      lastNeedBoard = withFirmware;
+      var errs = validate(s, withFirmware);
+      showErrors(errs);
+      if (errs.length) {
+        ev.stopPropagation();
+        ev.preventDefault();
+        $(errs[0].id).focus();
+        return;
+      }
+      revokeAll();
+      var url = buildManifest(withFirmware, s);
+      el.manifest = url;
+      el.setAttribute('manifest', url);
+      remember();
+    }, true);
+  }
+
+  // ---- convenience ----------------------------------------------------------
+  function bumpNumber(str, fallbackSuffix) {
+    var m = str.match(/(\d+)(?!.*\d)/);
+    if (m) return str.slice(0, m.index) + (parseInt(m[1], 10) + 1) + str.slice(m.index + m[1].length);
+    return str + fallbackSuffix;
+  }
+  function nextCamera() {
+    $('f-name').value = bumpNumber($('f-name').value || 'Mantis Cam 1', ' 2');
+    $('f-ap-ssid').value = bumpNumber($('f-ap-ssid').value || 'Mantis_1_Hotspot', '_2');
+    $('f-admin').value = randomPassword(12);
+    summarize(); remember();
+  }
+
+  function remember() {
+    try {
+      var o = {};
+      REMEMBER.forEach(function (id) {
+        var el = $(id);
+        o[id] = el.type === 'checkbox' ? el.checked : el.value;
+      });
+      localStorage.setItem(STORE_KEY, JSON.stringify(o));
+    } catch (e) { /* storage unavailable - fine */ }
+  }
+  function restore() {
+    try {
+      var o = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+      if (!o) return;
+      REMEMBER.forEach(function (id) {
+        if (!(id in o)) return;
+        var el = $(id);
+        if (el.type === 'checkbox') el.checked = !!o[id]; else el.value = o[id];
+      });
+    } catch (e) { /* ignore corrupt storage */ }
+  }
+
+  function init() {
+    if (!window.MantisMcfg) {
+      $('cfg-summary').textContent = 'Setup helper failed to load (mcfg.js). Reload the page.';
+      return;
+    }
+    restore();
+    $('f-admin').value = randomPassword(12);
+    $('gen-admin').addEventListener('click', function () { $('f-admin').value = randomPassword(12); summarize(); });
+    $('next-cam').addEventListener('click', nextCamera);
+    $('show-pw').addEventListener('change', function () {
+      var t = this.checked ? 'text' : 'password';
+      ['f-ap-pass', 'f-admin', 'f-st-pass'].forEach(function (id) { $(id).type = t; });
+    });
+    $('f-quality').addEventListener('input', function () { $('q-val').textContent = this.value; });
+    $('f-bright').addEventListener('input', function () { $('b-val').textContent = this.value; });
+    $('q-val').textContent = $('f-quality').value;
+    $('b-val').textContent = $('f-bright').value;
+    $('cfg-form').addEventListener('input', function () { summarize(); remember(); });
+    $('cfg-form').addEventListener('change', function () { summarize(); remember(); });
+    arm($('install-full'), true);
+    arm($('install-cfg'), false);
+    summarize();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
 </script>
 </body>
 </html>

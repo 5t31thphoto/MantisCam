@@ -1,0 +1,121 @@
+name: Mantis Build & Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Unzip into repo, consume zip, commit & push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mapfile -t ZIPS < <(find . -maxdepth 1 -type f -name '*.zip' | sort)
+          if [ ${#ZIPS[@]} -eq 0 ]; then
+            echo "No zip — using tree as-is"
+          else
+            for z in "${ZIPS[@]}"; do
+              echo "EXTRACT $z"
+              TMP=$(mktemp -d)
+              unzip -o "$z" -d "$TMP"
+              NDIR=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | wc -l)
+              NFILE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type f | wc -l)
+              TOP=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1 || true)
+              if [ "$NDIR" -eq 1 ] && [ "$NFILE" -eq 0 ] && [ -n "$TOP" ]; then
+                cp -a "$TOP"/. .
+              else
+                cp -a "$TMP"/. .
+              fi
+              rm -rf "$TMP"
+              rm -f "$z"
+            done
+            git add -A
+            if ! git diff --staged --quiet; then
+              git commit -m "ci: extract payload into repo (consume zip) [skip ci]"
+              git push origin HEAD:${{ github.ref_name }}
+            fi
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check flasher <-> firmware contract
+        run: |
+          set -euo pipefail
+          python tools/check_consistency.py
+          g++ -std=c++17 -Wall -o /tmp/test_mcfg tools/test_mcfg.cpp
+          node tools/test_mcfg.mjs
+
+      - name: Install PlatformIO
+        run: pip install platformio "esptool>=4.7,<5"
+
+      - name: Build Core2 + every camera board
+        run: |
+          set -euo pipefail
+          pio run -e m5stack-core2
+          CAM_ENVS=$(grep -oP '^\[env:\Kcam-[a-z0-9_]+' platformio.ini)
+          echo "camera envs: $CAM_ENVS"
+          for e in $CAM_ENVS; do pio run -e "$e"; done
+
+      - name: Collect firmware for Pages
+        run: |
+          set -euo pipefail
+          mkdir -p website/firmware
+          BOOT_APP0=$(find ~/.platformio/packages/framework-arduinoespressif32/tools/partitions -name boot_app0.bin | head -1)
+          [ -f "$BOOT_APP0" ] || { echo "boot_app0.bin not found"; exit 1; }
+          [ -f firmware_merged.bin ] || { echo "Core2 merged image missing"; exit 1; }
+          cp -f firmware_merged.bin website/firmware/mantis-core2-merged.bin
+
+          # One merged image per board, flashed at offset 0. No fallbacks: a bare
+          # app at offset 0 has no bootloader and boot-loops.
+          for e in $(grep -oP '^\[env:\Kcam-[a-z0-9_]+' platformio.ini); do
+            b=".pio/build/$e"; out="website/firmware/$e.bin"
+            if grep -q '"esp32s3"' "$b/idedata.json" 2>/dev/null || [[ "$e" == *s3* ]]; then
+              chip=esp32s3; boot_off=0x0;    mode=qio
+            else
+              chip=esp32;   boot_off=0x1000; mode=dio
+            fi
+            python -m esptool --chip "$chip" merge_bin -o "$out" \
+              --flash_mode "$mode" --flash_freq 80m --flash_size 4MB \
+              "$boot_off" "$b/bootloader.bin" 0x8000 "$b/partitions.bin" \
+              0xe000 "$BOOT_APP0" 0x10000 "$b/firmware.bin"
+            python tools/check_image.py "$out" "$boot_off"
+          done
+          ls -la website/firmware/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
