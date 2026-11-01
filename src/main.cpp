@@ -139,14 +139,14 @@ void setup() {
   memset(g_scope, 0, sizeof(g_scope));
 
   for (int i=0;i<MAX_PROFILES;i++) g_profiles[i].used=false;
+  g_sdOk = initSD();
+  if (g_sdOk) ensureDirs();
   loadConfig();
   loadProfiles();
   if (g_profileCount==0) {
     addOrUpdateProfile("Mantis 1", "Mantis_1_Hotspot", "mantis33", "192.168.5.1");
     saveProfiles();
   }
-  g_sdOk = initSD();
-  if (g_sdOk) ensureDirs();
 
   int idx = (g_activeProfile>=0) ? g_activeProfile : 0;
   if (g_profiles[idx].used) connectToProfile(idx);
@@ -232,43 +232,126 @@ void loop() {
 }
 
 // ---------- config / profiles ----------
+// Storage (shared with the other Mantis apps on this SD card):
+//  /wifi_config.json        home Wi-Fi {"ssid","pass",...} - same file MantisCore and Mantis AI use.
+//                           MantisCam only reads it, and writes back only the password of the home
+//                           network (when a camera profile uses that network). Other keys are kept.
+//  /mantiscam/cameras.json  MantisCam's own data: camera profiles, the default camera hotspot, the
+//                           active profile and the admin password. Never touches the shared Wi-Fi.
+//  NVS "mantiscam" / "camprofs": backup copy for when there is no SD card.
+// MantisCam no longer uses NVS namespace "mantis" (that is MantisCore's).
+static const char *CAM_CFG_PATH = "/mantiscam/cameras.json";
+static const char *SHARED_WIFI_PATH = "/wifi_config.json";
+String g_homeSsid, g_homePass;  // from /wifi_config.json
+
+static void readSharedWifi() {
+  g_homeSsid = ""; g_homePass = "";
+  if (!g_sdOk || !SD.exists(SHARED_WIFI_PATH)) return;
+  File f = SD.open(SHARED_WIFI_PATH, FILE_READ);
+  if (!f) return;
+  JsonDocument doc;
+  if (!deserializeJson(doc, f)) {
+    g_homeSsid = doc["ssid"] | "";
+    g_homePass = doc["pass"] | "";
+  }
+  f.close();
+}
+
+// Only the home network's password is ever written, and only into the existing shared file.
+static void writeSharedWifiPass(const char *ssid, const char *pass) {
+  if (!g_sdOk || g_homeSsid.length() == 0 || !g_homeSsid.equals(ssid) || g_homePass.equals(pass)) return;
+  JsonDocument doc;
+  File f = SD.open(SHARED_WIFI_PATH, FILE_READ);
+  if (f) { deserializeJson(doc, f); f.close(); }
+  doc["ssid"] = g_homeSsid;
+  doc["pass"] = pass;
+  f = SD.open(SHARED_WIFI_PATH, FILE_WRITE);
+  if (f) { serializeJson(doc, f); f.close(); g_homePass = pass; }
+}
+
 void loadConfig() {
-  prefs.begin("mantis", true);
+  readSharedWifi();
+  prefs.begin("mantiscam", true);
   cfgSsid=prefs.getString("ssid","Mantis_1_Hotspot");
   cfgPass=prefs.getString("pass","mantis33");
   cfgCamIp=prefs.getString("camip","192.168.5.1");
   cfgAdmin=prefs.getString("admin","admin1234");
   g_activeProfile=prefs.getInt("active",-1);
   prefs.end();
+  if (!g_sdOk || !SD.exists(CAM_CFG_PATH)) return;
+  File f = SD.open(CAM_CFG_PATH, FILE_READ);
+  if (!f) return;
+  JsonDocument doc;
+  if (!deserializeJson(doc, f)) {
+    cfgSsid = doc["default_camera"]["ssid"] | cfgSsid.c_str();
+    cfgPass = doc["default_camera"]["pass"] | cfgPass.c_str();
+    cfgCamIp = doc["default_camera"]["ip"] | cfgCamIp.c_str();
+    cfgAdmin = doc["admin"] | cfgAdmin.c_str();
+    g_activeProfile = doc["active"] | g_activeProfile;
+  }
+  f.close();
 }
 void saveConfig() {
-  prefs.begin("mantis", false);
+  prefs.begin("mantiscam", false);
   prefs.putString("ssid",cfgSsid);
   prefs.putString("pass",cfgPass);
   prefs.putString("camip",cfgCamIp);
   prefs.putString("admin",cfgAdmin);
   prefs.putInt("active",g_activeProfile);
   prefs.end();
+  saveProfiles(); // cameras.json carries the config too
 }
 void loadProfiles() {
-  prefs.begin("camprofs", true);
-  g_profileCount=prefs.getInt("n",0);
-  if (g_profileCount>MAX_PROFILES) g_profileCount=MAX_PROFILES;
-  for (int i=0;i<g_profileCount;i++) {
-    char k[16];
-    snprintf(k,sizeof(k),"l%d",i); String L=prefs.getString(k,"");
-    snprintf(k,sizeof(k),"s%d",i); String S=prefs.getString(k,"");
-    snprintf(k,sizeof(k),"p%d",i); String P=prefs.getString(k,"");
-    snprintf(k,sizeof(k),"i%d",i); String I=prefs.getString(k,"192.168.5.1");
-    strncpy(g_profiles[i].label,L.c_str(),23);
-    strncpy(g_profiles[i].ssid,S.c_str(),32);
-    strncpy(g_profiles[i].pass,P.c_str(),64);
-    strncpy(g_profiles[i].ip,I.c_str(),15);
-    g_profiles[i].used=(S.length()>0);
+  bool fromSd = false;
+  if (g_sdOk && SD.exists(CAM_CFG_PATH)) {
+    File f = SD.open(CAM_CFG_PATH, FILE_READ);
+    JsonDocument doc;
+    if (f && !deserializeJson(doc, f)) {
+      int i = 0;
+      for (JsonObject c : doc["cameras"].as<JsonArray>()) {
+        if (i >= MAX_PROFILES) break;
+        const char *S = c["ssid"] | "";
+        if (!S[0]) continue;
+        strncpy(g_profiles[i].label, c["label"] | S, 23); g_profiles[i].label[23] = 0;
+        strncpy(g_profiles[i].ssid, S, 32);                 g_profiles[i].ssid[32] = 0;
+        strncpy(g_profiles[i].pass, c["pass"] | "", 64);    g_profiles[i].pass[64] = 0;
+        strncpy(g_profiles[i].ip, c["ip"] | "192.168.5.1", 15); g_profiles[i].ip[15] = 0;
+        g_profiles[i].used = true;
+        i++;
+      }
+      g_profileCount = i;
+      fromSd = true;
+    }
+    if (f) f.close();
   }
-  prefs.end();
+  if (!fromSd) { // no SD file yet: use the NVS copy (and migrate it to SD below)
+    prefs.begin("camprofs", true);
+    g_profileCount=prefs.getInt("n",0);
+    if (g_profileCount>MAX_PROFILES) g_profileCount=MAX_PROFILES;
+    for (int i=0;i<g_profileCount;i++) {
+      char k[16];
+      snprintf(k,sizeof(k),"l%d",i); String L=prefs.getString(k,"");
+      snprintf(k,sizeof(k),"s%d",i); String S=prefs.getString(k,"");
+      snprintf(k,sizeof(k),"p%d",i); String P=prefs.getString(k,"");
+      snprintf(k,sizeof(k),"i%d",i); String I=prefs.getString(k,"192.168.5.1");
+      strncpy(g_profiles[i].label,L.c_str(),23);
+      strncpy(g_profiles[i].ssid,S.c_str(),32);
+      strncpy(g_profiles[i].pass,P.c_str(),64);
+      strncpy(g_profiles[i].ip,I.c_str(),15);
+      g_profiles[i].used=(S.length()>0);
+    }
+    prefs.end();
+  }
+  // A profile on the home network always uses the home password from the shared file.
+  for (int i=0;i<MAX_PROFILES;i++)
+    if (g_profiles[i].used && g_homeSsid.length() && g_homeSsid.equals(g_profiles[i].ssid)) {
+      strncpy(g_profiles[i].pass, g_homePass.c_str(), 64); g_profiles[i].pass[64] = 0;
+    }
+  if (g_activeProfile >= g_profileCount) g_activeProfile = -1;
+  if (!fromSd && g_sdOk && g_profileCount > 0) saveProfiles();
 }
 void saveProfiles() {
+  // NVS backup copy (compacted)
   prefs.begin("camprofs", false);
   int n=0;
   for (int i=0;i<MAX_PROFILES;i++) if (g_profiles[i].used) n++;
@@ -285,6 +368,29 @@ void saveProfiles() {
   }
   g_profileCount=n;
   prefs.end();
+  // the home network's password goes to the shared file, never the camera list's copy only
+  for (int i=0;i<MAX_PROFILES;i++)
+    if (g_profiles[i].used) writeSharedWifiPass(g_profiles[i].ssid, g_profiles[i].pass);
+  if (!g_sdOk) return;
+  JsonDocument doc;
+  doc["version"] = 1;
+  doc["default_camera"]["ssid"] = cfgSsid;
+  doc["default_camera"]["pass"] = cfgPass;
+  doc["default_camera"]["ip"] = cfgCamIp;
+  doc["admin"] = cfgAdmin;
+  doc["active"] = g_activeProfile;
+  JsonArray cams = doc["cameras"].to<JsonArray>();
+  for (int i=0;i<MAX_PROFILES;i++) {
+    if (!g_profiles[i].used) continue;
+    JsonObject c = cams.add<JsonObject>();
+    c["label"] = g_profiles[i].label;
+    c["ssid"] = g_profiles[i].ssid;
+    c["pass"] = g_profiles[i].pass;
+    c["ip"] = g_profiles[i].ip;
+  }
+  if (!SD.exists("/mantiscam")) SD.mkdir("/mantiscam");
+  File f = SD.open(CAM_CFG_PATH, FILE_WRITE);
+  if (f) { serializeJson(doc, f); f.close(); }
 }
 bool addOrUpdateProfile(const char *label, const char *ssid, const char *pass, const char *ip) {
   for (int i=0;i<MAX_PROFILES;i++) {
